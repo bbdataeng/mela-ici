@@ -1,0 +1,486 @@
+---
+title: ''
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(here)
+  library(tidyverse)
+  library(reshape2)
+  library(RColorBrewer)
+  library(ComplexHeatmap)
+})
+
+main_folder <- here()
+data_folder <- "/data/alice/melanoma/GSE112509/paired_end"
+```
+
+```{r}
+data_folder <- "/data/alice/melanoma/BBIRE"
+
+hla_files <- list.files(path = file.path(data_folder, "hlatyping"), pattern = "*_result.tsv", recursive = TRUE, full.names = TRUE)
+hla_data_list <- map(hla_files, ~ {
+  df <- suppressWarnings(suppressMessages(read_tsv(.x, show_col_types = FALSE)))
+  # extract the sample names
+  file_prefix <- str_split(basename(.x), "_")[[1]][1]
+  # add the sample name as a new column
+  df %>% 
+    select(-`...1`, -Reads, -Objective) %>%
+    mutate(subject = file_prefix, .before="A1")
+})
+hla <- bind_rows(hla_data_list)
+
+coldata <- read_tsv(file.path(main_folder,"coldata_sample_selection.tsv"), show_col_types=F) %>%
+  mutate(group.a = ifelse(group.a=="Solid Tissue Normal","Normal",group.a)) %>%
+  filter(batch == "BBIRE" | batch == "GSE112509") %>%
+  mutate(sample = gsub("^BB","",sample)) %>%
+  mutate(sample = gsub(".1T$","",sample))
+
+hla_bbire <- hla %>%
+  separate(subject, into = c("x1","x2"), sep = "-") %>%
+  unite("subject", x1,x2, sep=".") %>%
+  mutate(subject = gsub("^RE","IRE",subject)) %>%
+  filter(subject %in% coldata$sample)
+# write.table(hla_bbire, file.path(main_folder,"genotypes_bbire.csv"), quote = F, sep = ",", row.names = F, col.names = T)
+```
+
+```{r}
+data_folder <- "/data/alice/melanoma/GSE112509/paired_end"
+
+hla_files <- list.files(path = file.path(data_folder, "hlatyping"), pattern = "*_result.tsv", recursive = TRUE, full.names = TRUE)
+hla_data_list <- map(hla_files, ~ {
+  df <- suppressWarnings(suppressMessages(read_tsv(.x, show_col_types = FALSE)))
+  # extract the sample names
+  file_prefix <- str_split(basename(.x), "_")[[1]][1]
+  # add the sample name as a new column
+  df %>%
+    select(-`...1`, -Reads, -Objective) %>%
+    mutate(subject = file_prefix, .before="A1")
+})
+hla <- bind_rows(hla_data_list)
+# write.table(hla, file.path(main_folder,"genotypes_geo.csv"), quote = F, sep = ",", row.names = F, col.names = T)
+```
+
+
+# group annotation
+```{r}
+hla_geo <- read_csv(file.path(main_folder,"genotypes_geo.csv"), show_col_types=F)
+hla_bbire <- read_csv(file.path(main_folder,"genotypes_bbire.csv"), show_col_types=F)
+hla <- rbind(hla_geo,hla_bbire)
+# write.table(hla, file.path(main_folder,"genotypes.csv"), quote = F, sep = ",", row.names = F, col.names = T)
+
+coldata <- read_tsv(file.path(main_folder,"coldata_sample_selection.tsv"), show_col_types=F) %>%
+  mutate(group.a = ifelse(group.a=="Solid Tissue Normal","Normal",group.a)) %>%
+  filter(batch == "BBIRE" | batch == "GSE112509") %>%
+  mutate(sample = gsub("^BB","",sample)) %>%
+  mutate(sample = gsub(".1T$","",sample))
+
+meta <- coldata %>%
+  select(sample,group.a,batch) %>%
+  dplyr::rename("subject"="sample", "group"="group.a")
+
+
+
+tpm_files <- list.files(path = data_folder, pattern = "salmon.merged.gene_tpm.tsv", recursive = TRUE, full.names = TRUE)
+tpm_list <- map(tpm_files, ~ {
+  df <- suppressWarnings(suppressMessages(read_tsv(.x, show_col_types = FALSE)))
+  df %>% 
+    select(-gene_id) %>%
+    filter(grepl("HLA-A|HLA-B|HLA-C",gene_name)) %>%
+    column_to_rownames("gene_name")
+})
+tpm_geo <- bind_cols(tpm_list)
+
+
+tpm_bbire <- read_tsv(file.path(main_folder,"internal_dataset/gene_tpm.tsv"), show_col_types=F) %>%
+  filter(grepl("HLA-A$|HLA-B|HLA-C",gene_id)) %>%
+    column_to_rownames("gene_id")
+colnames(tpm_bbire) <- gsub("^BB","",colnames(tpm_bbire))
+colnames(tpm_bbire) <- gsub(".1T$","",colnames(tpm_bbire))
+tpm <- cbind(tpm_geo,tpm_bbire)
+
+
+hla.expr <- tpm %>%
+  select(any_of(meta$subject))
+```
+
+```{r}
+alter_fun = list(
+    background = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h-unit(0.5, "mm"), gp = gpar(fill = "#CCCCCC", col = NA))
+    },
+    A1 = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.47, vjust = 0, gp = gpar(fill = "#A6CEE3", col = NA))
+    },
+    A2 = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.47, vjust = 1, gp = gpar(fill = "#1F78B4", col = NA))
+    },
+    B1 = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.47, vjust = 0, gp = gpar(fill = "#B2DF8A", col = NA))
+    },
+    B2 = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.47, vjust = 1, gp = gpar(fill = "#33A02C", col = NA))
+    },
+    C1 = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.47, vjust = 0, gp = gpar(fill = "#FB9A99", col = NA))
+    },
+    C2 = function(x, y, w, h) {
+      grid.rect(x, y, w-unit(0.5, "mm"), h*0.47, vjust = 1, gp = gpar(fill = "#E31A1C", col = NA))
+    }
+  )
+```
+
+```{r}
+class <- c("A1", "A2", "B1", "B2", "C1", "C2")
+hla.melt <- melt(hla, id.vars = c("subject")) %>% 
+      mutate_at(.vars = c("subject","variable"), .funs = as.character) 
+hla.cast <- dcast(hla.melt, value~subject, value.var = "variable", fun.aggregate = function(x) paste(x, collapse = ";")) %>%
+  rename("hla"="value")
+
+##gene order
+hla.class1 <- hla.cast
+hla.class1 <- hla.class1 %>%
+  # count non-empty strings row-wise
+  mutate(non_empty_count = pmap_int(select(., -hla), ~ sum(c(...) != ""))) %>%
+  arrange(desc(non_empty_count)) %>%
+  top_n(n = 15) %>%
+  select(-non_empty_count) %>%
+  column_to_rownames("hla") %>%
+  select(where(~ any(.x != "")))
+
+hla.expr.aver <- colMeans(hla.expr)
+
+#check the order
+top_anno1 <- meta %>%
+  filter(subject %in% colnames(hla.class1)) %>%
+  pull(group)
+top_anno2 <- meta %>%
+  filter(subject %in% colnames(hla.class1)) %>%
+  pull(batch)
+
+
+# prioritize columns based on two things:
+# High number of non-empty cells
+# those non-empty cells are concentrated toward the top
+# we want the "densest & top-loaded" columns to come first
+
+# create a scoring function
+score_column <- function(x) {
+  positions <- which(x != "")
+  non_empty_count <- length(positions)
+  top_bias <- sum(1 / positions)  # gives more weight to top rows
+  
+  # combine both: you can tweak the weight (e.g., 0.7 for top bias, 0.3 for count)
+  score <- 0.7 * top_bias + 0.3 * non_empty_count
+  return(score)
+}
+
+# apply scoring across columns
+column_scores <- map_dbl(hla.class1, score_column)
+
+# sort columns by descending score
+hla.class1_sorted <- hla.class1[, order(-column_scores)]
+```
+
+order within group
+```{r}
+# create a scoring function
+score_column <- function(x) {
+  positions <- which(x != "")
+  non_empty_count <- length(positions)
+  top_bias <- sum(1 / positions)  # gives more weight to top rows
+  
+  # combine both: you can tweak the weight (e.g., 0.7 for top bias, 0.3 for count)
+  score <- 0.7 * top_bias + 0.3 * non_empty_count
+  return(score)
+}
+
+# apply scoring across columns
+column_scores <- map_dbl(hla.class1, score_column)
+
+group_info <- deframe(meta)
+
+# 4. Create data frame with column, group, and score
+col_meta <- data.frame(
+  sample = colnames(hla.class1),
+  group = group_info[colnames(hla.class1)],
+  score = column_scores
+)
+
+# 5. Sort within each group by score
+sorted_samples <- col_meta %>%
+  group_by(group) %>%
+  arrange(desc(score), .by_group = TRUE) %>%
+  pull(sample)
+
+# 6. Reorder columns
+hla.class1_sorted <- hla.class1[, sorted_samples]
+
+#check the order
+top_anno <- meta %>%
+  filter(subject %in% colnames(hla.class1)) %>%
+  arrange(match(subject, sorted_samples)) %>%
+  pull(group)
+```
+
+```{r}
+col_fun <- structure(
+  c("#A6CEE3", "#B2DF8A", "#FB9A99", "#1F78B4", "#33A02C", "#E31A1C"),
+  names = c("A1", "B1", "C1", "A2", "B2", "C2")
+)
+
+ht_list <- oncoPrint(hla.class1_sorted, get_type = function(x) strsplit(x, ";")[[1]],
+                     alter_fun_is_vectorized = FALSE,
+                     alter_fun = alter_fun, col = col_fun,
+                     row_names_gp = gpar(fontsize = 10,fontface = "bold"),
+                     pct_gp = gpar(fontsize = 10,fontface = "bold"),
+                     remove_empty_columns = FALSE,
+                     show_column_names = FALSE, 
+                     top_annotation = 
+                       HeatmapAnnotation(
+                         HLA_Expression=anno_points(hla.expr.aver[colnames(hla.class1_sorted)]),
+                         "Sample Type" = top_anno1,
+                         "Dataset" = top_anno2,
+                         col = list("Sample Type" = c("Primary Tumor" = "#d95d39",
+                                                      "Normal" = "#6a8532", 
+                                                      "Metastatic"="#c9ada7"),
+                                    "Dataset" = c("BBIRE"="#e0be36",
+                                                      "GSE112509"="#00a0d1")),
+                         annotation_name_gp = gpar(fontsize = 8),
+                         annotation_legend_param = list(
+                           title_gp = gpar(fontsize = 10, fontface = "bold") )
+                         ),
+                     
+                     heatmap_legend_param = list(title = "Allele",
+                                                 ncol=2,
+                                                 at = names(col_fun),
+                                                 labels = names(col_fun),
+                                                 legend_gp = gpar(fill = col_fun),
+                                                 grid_height = unit(6, "mm")))
+ht_list
+
+ht_list@top_annotation@anno_list[["Sample Type"]]@name_param[["show"]] <- FALSE
+ht_list@top_annotation@anno_list[["Dataset"]]@name_param[["show"]] <- FALSE
+
+ht_list
+
+
+png(file.path(main_folder,"visualizations/hla_overview.png"), width = 2500, height = 2000, res = 300)
+ht_list
+dev.off()
+```
+
+
+#---------------------------------------------------------------------
+HED heatmap
+```{r}
+suppressPackageStartupMessages({
+  library(here)
+  library(tidyverse)
+  library(ComplexHeatmap)
+  library(circlize)
+  
+  library(rstatix)
+  library(ggpubr)
+})
+main_folder <- here()
+```
+
+```{r}
+hed <- read_tsv(file.path(main_folder,"HED.tsv"), show_col_types=F) %>%
+  column_to_rownames("patient") %>%
+  select(-mean)
+
+coldata <- read_tsv(file.path(main_folder,"coldata_sample_selection.tsv"), show_col_types=F) %>%
+  mutate(group.a = ifelse(group.a=="Solid Tissue Normal","Normal",group.a)) %>%
+  filter(batch == "BBIRE" | batch == "GSE112509") %>%
+  mutate(sample = gsub("^BB","",sample)) %>%
+  mutate(sample = gsub(".1T$","",sample)) %>%
+  filter(sample %in% rownames(hed))
+
+
+IRE.1957
+```
+
+```{r}
+col = colorRamp2(
+  c(0, 2, 4, 6, 8, 10, 12, 14),
+  c("#ffba08","#faa307","#f48c06","#e85d04","#dc2f02","#d00000","#9d0208","#6a040f")
+)
+
+min_per_column <- as.data.frame(apply(hed,2,min))
+max_per_column <- as.data.frame(apply(hed,2,max))
+
+
+left_ha <- rowAnnotation(Dataset = coldata$batch,
+                            "Sample Type" = coldata$group.a,
+                            col = list(Dataset = c("BBIRE"="#e0be36",
+                                                 "GSE112509"="#00a0d1"),
+                                       "Sample Type" = c("Normal"="#6a8532",
+                                                 "Primary Tumor"="#d95d39",
+                                                 "Metastatic"="#c9ada7")),
+                        annotation_legend_param = list(Dataset = list(nrow = 2, title = "Dataset", title_gp = gpar(fontsize = 12, fontface = "bold")),
+                                                       "Sample Type" = list(nrow = 3, title = "Sample Type", title_gp = gpar(fontsize = 12, fontface = "bold")))
+                        )
+
+max_width_cm <- 5
+cell_width <- max_width_cm / nrow(hed)
+
+htmp <- draw(Heatmap(hed,
+             col = col, show_column_names = T, show_row_names = F,
+             cluster_rows = T, cluster_columns = F,
+             show_column_dend = T,
+             name = "HED",
+             row_split = coldata$group.a,
+             row_title = NULL,
+             #top_annotation = top_ha,
+             left_annotation = left_ha,
+             column_names_rot = 0, column_names_centered = T,
+             rect_gp = gpar(col = "white", lwd = 0.3),
+             border_gp = gpar(col = "#7f7f7f"),
+             width = unit(ncol(hed) * 0.6, "cm"),    # <- controls column width
+             height = unit(nrow(hed) * 0.2, "cm"),   # <- controls row height
+             heatmap_legend_param = list(legend_direction="vertical", 
+                                         at = c(0, 2, 4, 6, 8, 10, 12, 14),
+                                         #legend_width = unit(5, "cm"),
+                                         #legend_height = unit(3.8, "cm"),
+                                         #grid_width = unit(0.5, "cm"),
+                                         #grid_height = unit(0.5, "cm"),
+
+                                         title_position = "topcenter",
+                                         title_gp = gpar(fontsize = 12, fontface = "bold")),
+             border = TRUE), 
+             heatmap_legend_side="right", merge_legend = T)
+
+
+cell_size_px <- 30
+# calculate image dimensions
+width_px <- ncol(hed) * cell_size_px + 800   # + space for legends/annotations
+height_px <- nrow(hed) * cell_size_px + 300  # adjust margin buffer as needed
+
+png(file.path(main_folder,"visualizations/hed_heatmap2.png"), width = width_px, height = height_px, res = 300)
+htmp
+dev.off()
+```
+
+```{r}
+#function to compute statistics 
+fix_data <- function(data) {
+  dd <- data %>% 
+    pivot_longer(!Group, names_to = "Vars") %>%
+    inner_join(coldata, by = join_by(Vars == sample)) %>%
+    rename("type"="group.a")
+  stat <- list()
+  for (gene in unique(dd$Group)) {
+    aa <- dd %>% filter(Group == gene)
+    aa$type <- factor(aa$type, levels = c("Primary Tumor", "Metastatic"))
+    stat.test_TUM_MET <- aa %>%
+      filter(type != "Normal") %>% 
+      t_test(value ~ type) %>%
+      add_xy_position(x = "type", fun = "mean_se") %>% 
+      mutate(p.adj.signif=ifelse(p<=0.05,"*","ns")) %>% 
+      mutate(p.adj.signif=ifelse(p<=0.005,"**",p.adj.signif))
+    aa <- dd %>% filter(Group == gene)
+    aa$type <- factor(aa$type, levels = c("Normal", "Primary Tumor"))
+    stat.test_NORM_TUM <- aa %>%
+      filter(type != "Metastatic") %>% 
+      t_test(value ~ type) %>%
+      add_xy_position(x = "type", fun = "mean_se") %>% 
+      mutate(p.adj.signif=ifelse(p<=0.05,"*","ns")) %>% 
+      mutate(p.adj.signif=ifelse(p<=0.005,"**",p.adj.signif))
+    aa <- dd %>% filter(Group == gene)
+    aa$type <- factor(aa$type, levels = c("Normal", "Metastatic"))
+    stat.test_NORM_MET <- aa %>%
+      filter(type != "Primary Tumor") %>% 
+      t_test(value ~ type) %>%
+      add_xy_position(x = "type", fun = "mean_se") %>% 
+      mutate(p.adj.signif=ifelse(p<=0.05,"*","ns")) %>% 
+      mutate(p.adj.signif=ifelse(p<=0.005,"**",p.adj.signif))
+    stat.test <- rbind.data.frame(stat.test_NORM_TUM, stat.test_NORM_MET, stat.test_TUM_MET)
+    
+    stat.test <- stat.test %>% 
+      mutate(xmin = case_when(
+        group1 == "Normal" & group2 == "Primary Tumor" ~ 1,
+        group1 == "Normal" & group2 == "Metastatic" ~ 1,
+        group1 == "Primary Tumor" & group2 == "Metastatic" ~ 2
+      ),
+      xmax = case_when(
+        group1 == "Normal" & group2 == "Primary Tumor" ~ 2,
+        group1 == "Normal" & group2 == "Metastatic" ~ 3,
+        group1 == "Primary Tumor" & group2 == "Metastatic" ~ 3
+      )) 
+    stat[[gene]] <- stat.test
+  }
+  return(stat)
+}
+
+#boxplot
+plot_pop <- function(data, stats, ypos, gene) {
+  dd <- data %>% 
+    pivot_longer(!Group, names_to = "Vars") %>% 
+    inner_join(coldata, by = join_by(Vars == sample)) %>%
+    rename("type"="group.a")
+
+  df <- subset(dd, Group == gene)
+  
+  df$type <- factor(df$type, levels = c("Normal", "Primary Tumor", "Metastatic"))
+
+  ggplot(df, aes(x=type, y=value)) + 
+    ggtitle(gene) + 
+    stat_boxplot(geom = "errorbar", width = 0.2, aes(color = type), show.legend = F) +
+    geom_boxplot(size = 0.7, width = 0.3, aes(color = type), outlier.colour = NA, alpha=0.1, show.legend = F) +
+    geom_jitter(width = 0.1, size = 2, aes(color = type), alpha = 0.2, show.legend = F) +
+    labs(x = "", y = "HED") +
+    theme(plot.title = element_text(size = 14, hjust = 0.5, face = "bold.italic"),
+            plot.margin = margin(5,5,5,5), aspect.ratio = 1,
+            axis.text.y = element_text(size = 14 , color = "black"),
+            axis.text.x = element_text(face = "bold", size = 12, hjust = 0.5),
+            #axis.text.x = element_text(face = "bold", size = 9, hjust = 0.5, angle = 45),
+            #axis.text.x = element_text(face = "bold", size = 10, hjust = 1, angle = 45),
+            axis.title.y = element_text(size = 14, face = "bold", margin = margin(r = 10)),
+            panel.background = element_rect(fill="white"),
+            panel.grid = element_line(colour = "#f5f2f2"),
+            panel.border = element_rect(colour = "#383636", fill=NA, size=1), 
+            legend.title = element_blank(),
+            strip.text.x = element_text(size = 8, face = "bold.italic"),
+            strip.background = element_rect(fill="white")) +
+    scale_color_manual(values = c("Normal"="#6a8532","Primary Tumor"="#d95d39","Metastatic"="#c9ada7")) +
+    stat_pvalue_manual(stats, hide.ns = T, label = "p.adj.signif", tip.length = 0, y.position = ypos)
+    #{ if (! cell_pop %in% c("Macrophages M2", "Total Macrophages")) stat_pvalue_manual(stats, hide.ns = T, label = "p.adj.signif", tip.length = 0, y.position = ypos)} +
+    #{ if (cell_pop %in% c("Macrophages M2", "Total Macrophages")) stat_pvalue_manual(stats, hide.ns = T, label = "p", tip.length = 0, y.position = ypos, size = 2.5)}
+}
+```
+
+
+```{r}
+data <- hed %>%
+  rename("HLA-A"="A", "HLA-B"="B", "HLA-C"="C") %>%
+  t(.) %>%
+  as.data.frame(.) %>%
+  rownames_to_column("Group")
+
+stats <- fix_data(data)
+p1 <- plot_pop(data, gene = "HLA-C", stats = stats$`HLA-C`, ypos = c(8.2,8.5))
+p1
+p2 <- plot_pop(data, gene = "HLA-B", stats = stats$`HLA-B`, ypos = c(15.5))
+p2
+p3 <- plot_pop(data, gene = "HLA-A", stats = stats$`HLA-A`, ypos = c(0))
+p3
+
+# Loop to save each plot
+for (i in 1:3) {
+  plot_name <- paste0("p", i)
+  file_name <- paste0(file.path(main_folder,"visualizations/hed_boxplot"), i, ".png")
+  
+  png(file_name, width = 2500, height = 1500, res = 300)
+  print(get(plot_name))
+  dev.off()
+}
+```
+
+

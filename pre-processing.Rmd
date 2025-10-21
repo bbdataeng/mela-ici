@@ -1,0 +1,150 @@
+---
+title: "mela-ICI pre-processing"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+METADATA PROCESSING
+
+```{r}
+suppressPackageStartupMessages({
+  library(here)
+  library(tidyverse)
+  library(openxlsx)
+})
+
+main_folder <- here()
+```
+
+```{r}
+auslander <- read.xlsx(file.path(main_folder,"datasets/auslander-2018-metadata.xlsx")) %>%
+  mutate(Sample = gsub(" ","",Sample)) %>%
+  mutate(Sample = ifelse(Sample %in% c("272-020415", "272-121914", "422-092815", "422-110515"), gsub("^","MGH",Sample), Sample)) %>%
+  mutate(Sample = ifelse(Sample %in% c("MGH272-020415", "MGH272-121914", "MGH422-092815", "MGH422-110515"), gsub("$",".bam",Sample), Sample)) 
+
+auslander_sra <- read_tsv(file.path(main_folder,"datasets/auslander-2018_sra_explorer_metadata.tsv"), show_col_types=F) %>%
+  select(Accession,Title) %>%
+  separate(col = Title, into = c("sample_name",NA), sep = ";", remove = T) %>%
+  separate(col = sample_name, into = c(NA,"sample_name"), sep = ": ", remove = T) %>%
+  unique(.)
+
+auslander_metadata <- inner_join(auslander_sra,auslander, by = c("sample_name"="Sample"))
+
+auslander_metadata_selection <- auslander_metadata %>%
+  rename("accession"="Accession", "response"="Response", "age"="Age", "gender"="Sex", "treatment"="Treatment", "biopsy_time"="Treatnent.state") %>%
+  select(accession,sample_name,response,treatment,biopsy_time,age,gender) %>%
+  mutate(enrichment_protocol = "ribo-zero depletion") %>%
+  mutate(dataset = "Auslander-2018")
+
+```
+
+```{r}
+hugo <- read.xlsx(file.path(main_folder,"datasets/hugo-2016-metadata.xlsx"), sheet = "S1A", startRow = 2) %>%
+  slice_head(n = 39) %>%
+  rename("accession"="SRA.Run.ID,.tumor.RNA", "sample_name"="Patient.ID", "gender"="Gender", "age"="Age", "treatment"="Treatment", "biopsy_time"="Biopsy.Time") %>%
+  select(accession,sample_name,irRECIST,treatment,biopsy_time,age,gender) %>%
+  filter(!is.na(accession)) %>%
+  mutate(response = case_when(
+    irRECIST == "Progressive Disease" ~ "PD",
+    irRECIST == "Partial Response"    ~ "PR",
+    irRECIST == "Complete Response"   ~ "CR",
+    TRUE ~ NA_character_
+  ), .after="irRECIST") %>%
+  select(-irRECIST)
+
+# Get the reference row (the one you want to copy values from)
+ref_row <- hugo %>% filter(accession == "SRR3184298")
+
+# Fill NAs in the target row with corresponding values from ref_row
+hugo_metadata_selection <- hugo %>%
+  mutate(across(
+    everything(),
+    ~ ifelse(accession == "SRR3184299" & is.na(.x),
+             ref_row[[cur_column()]],
+             .x)
+  )) %>%
+  mutate(enrichment_protocol = "poly-A selection") %>%
+  mutate(dataset = "Hugo-2016") %>%
+  mutate(treatment = tolower(treatment))
+```
+
+```{r}
+riaz_sra <- read_tsv(file.path(main_folder,"datasets/riaz-2017_sra_explorer_metadata.tsv"), show_col_types=F) %>%
+  select(Accession,Title) %>%
+  separate(col = Title, into = c("sample_name",NA), sep = ";", remove = T) %>%
+  separate(col = sample_name, into = c(NA,"sample_name"), sep = ": ", remove = T) %>%
+  unique(.) %>%
+  rename("accession"="Accession")
+
+riaz_sra_runtable <- read_csv(file.path(main_folder,"datasets/riaz-2017_SraRunTable.csv"), show_col_types=F) %>%
+  select(Run,response) %>%
+  rename("accession"="Run")
+
+riaz_metadata_selection <- inner_join(riaz_sra, riaz_sra_runtable) %>%
+  mutate(enrichment_protocol = "unspecified") %>%
+  mutate(treatment="nivolumab",biopsy_time=NA,age=NA,gender=NA,dataset="Riaz-2017") %>%
+  mutate(biopsy_time = ifelse(grepl("_Pre_",sample_name),"pre-treatment",biopsy_time)) %>%
+  mutate(biopsy_time = ifelse(grepl("_On_",sample_name),"on-treatment",biopsy_time)) 
+```
+
+```{r}
+du_sra <- read_tsv(file.path(main_folder,"datasets/du-2021_sra_explorer_metadata.tsv"), show_col_types=F) %>%
+  select(Accession,Title) %>%
+  separate(col = Title, into = c("sample_name",NA), sep = ";", remove = T) %>%
+  separate(col = sample_name, into = c(NA,"sample_name"), sep = ": ", remove = T) %>%
+  unique(.) %>%
+  rename("accession"="Accession")
+
+du_sra_runtable <- read_csv(file.path(main_folder,"datasets/du-2021_SraRunTable.csv"), show_col_types=F) %>%
+  select(Run,response_immune_checkpoint_blockade_therapy,antibody,treatment_state,age_at_the_baseline) %>%
+  rename("accession"="Run","response"="response_immune_checkpoint_blockade_therapy","treatment"="antibody","biopsy_time"="treatment_state","age"="age_at_the_baseline")
+
+du_metadata_selection <- inner_join(du_sra, du_sra_runtable) %>%
+  mutate(enrichment_protocol = "ribo-zero depletion") %>%
+  mutate(gender=NA,dataset="Du-2021") %>%
+  mutate(biopsy_time = ifelse(biopsy_time=="PRE","pre-treatment","on-treatment"))
+```
+
+```{r}
+gide_sra_runtable <- read_csv(file.path(main_folder,"datasets/gide-2019_SraRunTable.csv"), show_col_types=F) %>%
+  select(Run,Sample_name) %>%
+  rename("accession"="Run","sample_name"="Sample_name") %>%
+  mutate(biopsy_time = ifelse(grepl("_PRE",sample_name),"pre-treatment","early during therapy")) %>%
+  mutate(patient = ifelse(grepl("_PRE",sample_name), gsub("_PRE$","",sample_name), gsub("_EDT$","",sample_name)))
+         
+
+gide1 <- read.xlsx(file.path(main_folder,"datasets/gide-2019-metadata-anti-pd1-mono.xlsx"), sheet = "Table S1. PD-1 Patient", startRow = 2) %>%
+  select(`Patient.no.`,`Age.(Years)`,Sex,Treatment,Best.RECIST.response,RNA.Sequencing) %>%
+  rename("patient"="Patient.no.","age"="Age.(Years)","gender"="Sex","treatment"="Treatment","response"="Best.RECIST.response") %>%
+  mutate(patient = gsub("^","PD1_",patient)) %>%
+  mutate(treatment = tolower(treatment)) %>%
+  filter(!RNA.Sequencing=="-") %>%
+  select(-`RNA.Sequencing`)
+
+gide2 <- read.xlsx(file.path(main_folder,"datasets/gide-2019-metadata-anti-pd1-ctla4.xlsx"), sheet = "Table S2. PD-1+CTLA-4 patients", startRow = 2) %>%
+  select(`Patient.no.`,`Age.(Years)`,Sex,Treatment,Best.RECIST.response,RNA.Sequencing) %>%
+  rename("patient"="Patient.no.","age"="Age.(Years)","gender"="Sex","treatment"="Treatment","response"="Best.RECIST.response") %>%
+  mutate(patient = gsub("^","ipiPD1_",patient)) %>%
+  mutate(treatment = tolower(treatment)) %>%
+  mutate(`RNA.Sequencing`=ifelse(patient=="ipiPD1_38","PRE",`RNA.Sequencing`)) %>%
+  filter(!RNA.Sequencing=="-") %>%
+  select(-`RNA.Sequencing`)
+
+gide3 <- rbind(gide1,gide2)
+
+gide_metadata_selection <- inner_join(gide_sra_runtable,gide3) %>%
+  select(accession,sample_name,response,treatment,biopsy_time,age,gender) %>%
+  mutate(enrichment_protocol = "targeted mRNA capture") %>%
+  mutate(dataset="Gide-2019")
+```
+
+```{r}
+immunotherapy_metadata <- rbind(hugo_metadata_selection,riaz_metadata_selection,auslander_metadata_selection,gide_metadata_selection,du_metadata_selection) 
+write.table(immunotherapy_metadata, file.path(main_folder,"datasets/immunotherapy_datasets_metadata.tsv"), sep="\t", quote=FALSE, row.names=F, col.names=T)
+write.xlsx(immunotherapy_metadata, file.path(main_folder,"datasets/immunotherapy_datasets_metadata.xlsx"),
+  colNames = TRUE, rowNames = FALSE, append = FALSE)
+```
+
