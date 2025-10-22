@@ -241,10 +241,11 @@ table(xdata$dataset) |> plot(las = 2, main = "dataset")
 ### clean response ###
 table(xdata$response, useNA = "always") # have a look
 xdata$response[xdata$response == "UNK"] <- NA # turn "UNK" to NA
+xdata$response[xdata$response == "PRCR"] <- "R" # turn "PRCR" to "R"
 xdata$response <- xdata$response |>
   droplevels() |> # remove unused "UNK" level
   factor( # reorder levels from worst to best
-    levels = c("PD", "NR", "SD", "PR", "PRCR", "R", "CR"),
+    levels = c("PD", "NR", "SD", "PR", "R", "CR"),
     ordered = TRUE
   )
 table(xdata$response, useNA = "always") # have a look
