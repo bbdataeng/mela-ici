@@ -336,6 +336,18 @@ xdata <- xdata[, setdiff(names(xdata), "on_dabrafenib_trametinib")]
 # exclude samples with unknown response
 xdata <- xdata[!is.na(xdata$response), ] |> droplevels()
 
+# exclude biopsies made during treatment
+xdata <- subset(xdata, biopsy_time == "PRE-ICB") |> droplevels()
+
+# keep only one biopsy per patient
+keep <- rep(TRUE, nrow(xdata))
+for (i in 2:nrow(xdata)) {
+  if (xdata$patient_id[i] == xdata$patient_id[[i - 1]]) {
+    keep[i] <- FALSE
+  }
+}
+xdata <- xdata[keep, ] |> droplevels()
+table(table(xdata$patient_id)) # only 1 biopsy per patient, as expected
 
 # Export xdata ---------------------------------------------------------
 
