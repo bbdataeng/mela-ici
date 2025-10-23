@@ -121,85 +121,6 @@ make_stacked_barplot(
   mar = c(8, 4, 4, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
 )
 
-
-# Plots response ~ biopsy_time --------------------------------------------
-
-# stacked barchart showing absolute frequencies
-make_stacked_barplot(
-  x_var = metadata$biopsy_time, # x-axis variable
-  x_var_name = "Biopsy Time", # name of the x-axis variable
-  col_var = metadata$response, # color-axis variable
-  col_var_name = "Response", # name of the color-axis variable
-  type = "frequency",
-  color_palette = colors_response, # vector of colors matching levels of col_var
-  rotate_x_var_labels = FALSE, # rotate x_axis labels (useful for long names)
-  show_x_var_frequencies = FALSE, # don't show x-var frequencies
-  show_percentages = TRUE, # whether to show percentages in the bars
-  min_percentage = 2, # hide percentages below this threshold
-  file_path = file.path(response_folder, "response_biopsy-time_stacked_frequencies.png"), # file path (with format) to save the plot
-  res_ppi = resol, # resolution of the plot
-  width_in = 4, height_in = 5, # width and height of the plot (in inches)
-  mar = c(3.5, 4, 1, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
-)
-
-# stacked barchart showing proportions
-make_stacked_barplot(
-  x_var = metadata$biopsy_time, # x-axis variable
-  x_var_name = "Biopsy Time", # name of the x-axis variable
-  col_var = metadata$response, # color-axis variable
-  col_var_name = "Response", # name of the color-axis variable
-  type = "proportion",
-  color_palette = colors_response, # vector of colors matching levels of col_var
-  rotate_x_var_labels = FALSE, # rotate x_axis labels (useful for long names)
-  show_x_var_frequencies = TRUE, # show x-var frequencies
-  show_percentages = TRUE, # whether to show percentages in the bars
-  min_percentage = 2, # hide percentages below this threshold
-  file_path = file.path(response_folder, "response_biopsy-time_stacked_proportions.png"), # file path (with format) to save the plot
-  res_ppi = resol, # resolution of the plot
-  width_in = 4, height_in = 5, # width and height of the plot (in inches)
-  mar = c(3.5, 4, 4, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
-)
-
-
-# Plots response_group ~ biopsy_time --------------------------------------
-
-# stacked barchart showing absolute frequencies
-make_stacked_barplot(
-  x_var = metadata$biopsy_time, # x-axis variable
-  x_var_name = "Biopsy Time", # name of the x-axis variable
-  col_var = metadata$response_group, # color-axis variable
-  col_var_name = "Response", # name of the color-axis variable
-  type = "frequency",
-  color_palette = colors_response_group, # vector of colors matching levels of col_var
-  rotate_x_var_labels = FALSE, # rotate x_axis labels (useful for long names)
-  show_x_var_frequencies = FALSE, # don't show x-var frequencies
-  show_percentages = TRUE, # whether to show percentages in the bars
-  min_percentage = 2, # hide percentages below this threshold
-  file_path = file.path(response_group_folder, "response_biopsy-time_stacked_frequencies.png"), # file path (with format) to save the plot
-  res_ppi = resol, # resolution of the plot
-  width_in = 4, height_in = 5, # width and height of the plot (in inches)
-  mar = c(3.5, 4, 1, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
-)
-
-# stacked barchart showing proportions
-make_stacked_barplot(
-  x_var = metadata$biopsy_time, # x-axis variable
-  x_var_name = "Biopsy Time", # name of the x-axis variable
-  col_var = metadata$response_group, # color-axis variable
-  col_var_name = "Response", # name of the color-axis variable
-  type = "proportion",
-  color_palette = colors_response_group, # vector of colors matching levels of col_var
-  rotate_x_var_labels = FALSE, # rotate x_axis labels (useful for long names)
-  show_x_var_frequencies = TRUE, # show x-var frequencies
-  show_percentages = TRUE, # whether to show percentages in the bars
-  min_percentage = 2, # hide percentages below this threshold
-  file_path = file.path(response_group_folder, "response_biopsy-time_stacked_proportions.png"), # file path (with format) to save the plot
-  res_ppi = resol, # resolution of the plot
-  width_in = 4, height_in = 5, # width and height of the plot (in inches)
-  mar = c(3.5, 4, 4, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
-)
-
-
 # Plots response ~ gender -------------------------------------------------
 
 gender_with_NA <- addNA(metadata$gender)
@@ -488,7 +409,7 @@ legend(
 dev.off()
 
 # stacked barchart showing absolute frequencies
-bin_age <- cut(metadata$age, breaks = seq(0, 100, 5)) |>
+bin_age <- cut(metadata$age, breaks = seq(0, 100, 10)) |>
   droplevels() |>
   addNA()
 levels(bin_age)[nlevels(bin_age)] <- "Unknown"
@@ -505,7 +426,7 @@ make_stacked_barplot(
   min_percentage = 2, # hide percentages below this threshold
   file_path = file.path(response_folder, "response_aged_stacked_frequencies.png"), # file path (with format) to save the plot
   res_ppi = resol, # resolution of the plot
-  width_in = 8, height_in = 6, # width and height of the plot (in inches)
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
   mar = c(4.5, 4, 1, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
 )
 
@@ -523,7 +444,7 @@ make_stacked_barplot(
   min_percentage = 2, # hide percentages below this threshold
   file_path = file.path(response_folder, "response_age_stacked_proportions.png"), # file path (with format) to save the plot
   res_ppi = resol, # resolution of the plot
-  width_in = 8, height_in = 6, # width and height of the plot (in inches)
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
   mar = c(4.5, 4, 4, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
 )
 
@@ -568,7 +489,7 @@ legend(
 dev.off()
 
 # stacked barchart showing absolute frequencies
-bin_age <- cut(metadata$age, breaks = seq(0, 100, 5)) |>
+bin_age <- cut(metadata$age, breaks = seq(0, 100, 10)) |>
   droplevels() |>
   addNA()
 levels(bin_age)[nlevels(bin_age)] <- "Unknown"
@@ -585,7 +506,7 @@ make_stacked_barplot(
   min_percentage = 2, # hide percentages below this threshold
   file_path = file.path(response_group_folder, "response_aged_stacked_frequencies.png"), # file path (with format) to save the plot
   res_ppi = resol, # resolution of the plot
-  width_in = 8, height_in = 6, # width and height of the plot (in inches)
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
   mar = c(4.5, 4, 1, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
 )
 
@@ -603,7 +524,7 @@ make_stacked_barplot(
   min_percentage = 2, # hide percentages below this threshold
   file_path = file.path(response_group_folder, "response_age_stacked_proportions.png"), # file path (with format) to save the plot
   res_ppi = resol, # resolution of the plot
-  width_in = 8, height_in = 6, # width and height of the plot (in inches)
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
   mar = c(4.5, 4, 4, 5), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
 )
 
@@ -649,7 +570,7 @@ legend(
 dev.off()
 
 # stacked barchart showing absolute frequencies
-bin_age <- cut(metadata$age, breaks = seq(0, 100, 5)) |>
+bin_age <- cut(metadata$age, breaks = seq(0, 100, 10)) |>
   droplevels() |>
   addNA()
 levels(bin_age)[nlevels(bin_age)] <- "Unknown"
@@ -666,7 +587,7 @@ make_stacked_barplot(
   min_percentage = 2, # hide percentages below this threshold
   file_path = file.path(gender_folder, "gender_aged_stacked_frequencies.png"), # file path (with format) to save the plot
   res_ppi = resol, # resolution of the plot
-  width_in = 8, height_in = 6, # width and height of the plot (in inches)
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
   mar = c(4.5, 4, 1, 6), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
 )
 
@@ -684,7 +605,7 @@ make_stacked_barplot(
   min_percentage = 2, # hide percentages below this threshold
   file_path = file.path(gender_folder, "gender_age_stacked_proportions.png"), # file path (with format) to save the plot
   res_ppi = resol, # resolution of the plot
-  width_in = 8, height_in = 6, # width and height of the plot (in inches)
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
   mar = c(4.5, 4, 4, 6), mgp = c(2.5, 0.8, 0), tcl = -0.3, las = 1 # additional par() parameters
 )
 

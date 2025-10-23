@@ -10,19 +10,11 @@ if (!dir.exists(output_folder)) dir.create(output_folder)
 metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds")
 xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds")
 
-# create mock logical n_patients variable
-metadata$n_patients <- TRUE
-for (i in 2:nrow(metadata)) {
-  metadata$n_patients[i] <- metadata$patient_id[i] != metadata$patient_id[i - 1]
-}
-nlevels(metadata$patient_id) == sum(metadata$n_patients) # it worked
-
 # Summary tables ----------------------------------------------------------
 
 ## table with "response", split by dataset
 cols_to_include <- c(
-  "n_patients", "age", "gender", "response", "treatment",
-  "biopsy_time", "enrichment_protocol"
+  "age", "gender", "response", "treatment", "enrichment_protocol"
 )
 tbl_summary(
   data = metadata,
@@ -31,8 +23,7 @@ tbl_summary(
   missing = "ifany",
   statistic = list(
     all_continuous() ~ "{median} ({p25}, {p75})",
-    all_categorical() ~ "{n} ({p}%)",
-    n_patients ~ "{n}"
+    all_categorical() ~ "{n} ({p}%)"
   ),
 ) |>
   modify_header(all_stat_cols() ~ "**{level}**  \nN = {n} ({style_percent(p)}%)") |>
@@ -45,8 +36,7 @@ tbl_summary(
 
 ## table with "response", split by treatment
 cols_to_include <- c(
-  "age", "gender", "response",
-  "biopsy_time", "enrichment_protocol", "dataset"
+  "age", "gender", "response", "enrichment_protocol", "dataset"
 )
 tbl_summary(
   data = metadata,
@@ -67,8 +57,7 @@ tbl_summary(
 
 ## table split by "response"
 cols_to_include <- c(
-  "age", "gender", "treatment",
-  "biopsy_time", "enrichment_protocol", "dataset"
+  "age", "gender", "treatment", "enrichment_protocol", "dataset"
 )
 tbl_summary(
   data = metadata,
@@ -89,8 +78,7 @@ tbl_summary(
 
 ## table with "response_group", split by dataset
 cols_to_include <- c(
-  "n_patients", "age", "gender", "response_group", "treatment",
-  "biopsy_time", "enrichment_protocol"
+  "age", "gender", "response_group", "treatment", "enrichment_protocol"
 )
 tbl_summary(
   data = metadata,
@@ -99,8 +87,7 @@ tbl_summary(
   missing = "ifany",
   statistic = list(
     all_continuous() ~ "{median} ({p25}, {p75})",
-    all_categorical() ~ "{n} ({p}%)",
-    n_patients ~ "{n}"
+    all_categorical() ~ "{n} ({p}%)"
   ),
 ) |>
   modify_header(all_stat_cols() ~ "**{level}**  \nN = {n} ({style_percent(p)}%)") |>
@@ -112,8 +99,7 @@ tbl_summary(
 
 ## table with "response_group", split by treatment
 cols_to_include <- c(
-  "age", "gender", "response_group",
-  "biopsy_time", "enrichment_protocol", "dataset"
+  "age", "gender", "response_group", "enrichment_protocol", "dataset"
 )
 tbl_summary(
   data = metadata,
@@ -134,8 +120,7 @@ tbl_summary(
 
 ## table split by "response_group"
 cols_to_include <- c(
-  "age", "gender", "treatment",
-  "biopsy_time", "enrichment_protocol", "dataset"
+  "age", "gender", "treatment", "enrichment_protocol", "dataset"
 )
 tbl_summary(
   data = metadata,
