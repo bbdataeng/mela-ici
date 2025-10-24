@@ -11,26 +11,53 @@ metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds")
 xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds")
 
 
-# Prepare plots -----------------------------------------------------------
+# Plot settings -----------------------------------------------------------
+resol <- 300
+transparency_colors <- 1
 
 # prepare colors for response
-colors_response <- paletteer_d("ggsci::default_nejm", nlevels(metadata$response))
+colors_response <- paletteer_c(
+  "grDevices::RdYlBu", nlevels(metadata$response)
+) |>
+  adjustcolor(alpha.f = transparency_colors)
 names(colors_response) <- levels(metadata$response)
 
 # prepare colors for response_group
-colors_response_group <- paletteer_d("ggsci::default_nejm", nlevels(metadata$response_group))
+colors_response_group <- paletteer_d(
+  "ggsci::default_jama", nlevels(metadata$response_group)
+) |>
+  adjustcolor(alpha.f = transparency_colors)
 names(colors_response_group) <- levels(metadata$response_group)
 
-# prepare colors for gender
-colors_gender <- paletteer_d("RColorBrewer::Dark2", nlevels(metadata$gender))
-names(colors_gender) <- levels(metadata$gender)
+# prepare colors for sex
+colors_gender <- paletteer_d(
+  "RColorBrewer::Dark2", nlevels(metadata$gender) + 1
+) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_gender) <- c(levels(metadata$gender), "Unknown")
+colors_gender["Unknown"] <- adjustcolor("grey", transparency_colors) # white for NA
+
+# prepare colors for enrichment protocol
+colors_enrichment_protocol <- paletteer_d(
+  "ggsci::default_igv", nlevels(metadata$enrichment_protocol) + 1
+) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_enrichment_protocol) <- c(levels(metadata$enrichment_protocol), "Unknown")
+colors_enrichment_protocol["Unknown"] <- adjustcolor("grey", transparency_colors) # white for NA
+
+# prepare colors for dataset
+colors_dataset <- paletteer_d(
+  "ggsci::default_nejm", nlevels(metadata$dataset)
+) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_dataset) <- levels(metadata$dataset)
 
 # prepare colors for treatment
-colors_treatment <- paletteer_d("ggsci::default_jco", nlevels(metadata$treatment))
+colors_treatment <- paletteer_d(
+  "ggsci::default_jco", nlevels(metadata$treatment)
+) |>
+  adjustcolor(alpha.f = transparency_colors)
 names(colors_treatment) <- levels(metadata$treatment)
-
-# plot resolution
-resol <- 300
 
 
 # Prepare subfolders ------------------------------------------------------
@@ -395,7 +422,7 @@ axis(
 )
 grid()
 abline(h = 1:nlevels(metadata$response), col = "gray70", lty = "dotted")
-points(x = xx$x, y = xx$y, cex = xx$cex, pch = 16, col = adjustcolor("#023E8A", 0.8))
+points(x = xx$x, y = xx$y, cex = xx$cex, pch = 21, bg = adjustcolor("#023E8A", 0.8))
 par(xpd = TRUE)
 legend_labels <- c(0, 1, 2, 4, 6, 8, 10)
 legend_pt.cx <- (legend_labels / max(xx$Freq)) |> sqrt() * expansion_factor
@@ -403,8 +430,8 @@ legend(
   x = par("usr")[2] + 2,
   y = mean(par("usr")[3:4]),
   xjust = 0, yjust = 0.5, bty = "n", cex = 0.8,
-  legend = legend_labels, pt.cex = legend_pt.cx, col = adjustcolor("#023E8A", 0.8),
-  pch = 16, y.intersp = 2, x.intersp = 2.5, title = "N. observations"
+  legend = legend_labels, pt.cex = legend_pt.cx, pt.bg = adjustcolor("#023E8A", 0.8),
+  pch = 21, y.intersp = 2, x.intersp = 2.5, title = "N. observations"
 )
 dev.off()
 
@@ -475,7 +502,7 @@ axis(
 )
 grid()
 abline(h = 1:nlevels(metadata$response_group), col = "gray70", lty = "dotted")
-points(x = xx$x, y = xx$y, cex = xx$cex, pch = 16, col = adjustcolor("#023E8A", 0.8))
+points(x = xx$x, y = xx$y, cex = xx$cex, pch = 21, bg = adjustcolor("#023E8A", 0.8))
 par(xpd = TRUE)
 legend_labels <- c(0, 1, 2, 4, 6, 8, 10)
 legend_pt.cx <- (legend_labels / max(xx$Freq)) |> sqrt() * expansion_factor
@@ -483,8 +510,8 @@ legend(
   x = par("usr")[2] + 2,
   y = mean(par("usr")[3:4]),
   xjust = 0, yjust = 0.5, bty = "n", cex = 0.8,
-  legend = legend_labels, pt.cex = legend_pt.cx, col = adjustcolor("#023E8A", 0.8),
-  pch = 16, y.intersp = 2, x.intersp = 2.5, title = "N. observations"
+  legend = legend_labels, pt.cex = legend_pt.cx, pt.bg = adjustcolor("#023E8A", 0.8),
+  pch = 21, y.intersp = 2, x.intersp = 2.5, title = "N. observations"
 )
 dev.off()
 
@@ -556,7 +583,7 @@ axis(
 )
 abline(h = 1:nlevels(gender_with_NA), col = "gray70", lty = "dotted")
 abline(v = seq(0, 100, 10), col = "gray70", lty = "dotted")
-points(x = xx$x, y = xx$y, cex = xx$cex, pch = 16, col = adjustcolor("#023E8A", 0.8))
+points(x = xx$x, y = xx$y, cex = xx$cex, pch = 21, bg = adjustcolor("#023E8A", 0.8))
 par(xpd = TRUE)
 legend_labels <- c(0, 1, 2, 4, 6, 8, 10)
 legend_pt.cx <- (legend_labels / max(xx$Freq)) |> sqrt() * expansion_factor
@@ -564,8 +591,8 @@ legend(
   x = par("usr")[2] + 2,
   y = mean(par("usr")[3:4]),
   xjust = 0, yjust = 0.5, bty = "n", cex = 0.8,
-  legend = legend_labels, pt.cex = legend_pt.cx, col = adjustcolor("#023E8A", 0.8),
-  pch = 16, y.intersp = 2, x.intersp = 2.5, title = "N. observations"
+  legend = legend_labels, pt.cex = legend_pt.cx, pt.bg = adjustcolor("#023E8A", 0.8),
+  pch = 21, y.intersp = 2, x.intersp = 2.5, title = "N. observations"
 )
 dev.off()
 
@@ -580,7 +607,7 @@ make_stacked_barplot(
   col_var = gender_with_NA, # color-axis variable
   col_var_name = "Gender", # name of the color-axis variable
   type = "frequency",
-  color_palette = c(colors_gender, "grey"), # vector of colors matching levels of col_var
+  color_palette = colors_gender, # vector of colors matching levels of col_var
   rotate_x_var_labels = TRUE, # rotate x_axis labels (useful for long names)
   show_x_var_frequencies = FALSE, # don't show x-var frequencies
   show_percentages = TRUE, # whether to show percentages in the bars
@@ -598,7 +625,7 @@ make_stacked_barplot(
   col_var = gender_with_NA, # color-axis variable
   col_var_name = "Gender", # name of the color-axis variable
   type = "proportion",
-  color_palette = c(colors_gender, "grey"), # vector of colors matching levels of col_var
+  color_palette = colors_gender, # vector of colors matching levels of col_var
   rotate_x_var_labels = TRUE, # rotate x_axis labels (useful for long names)
   show_x_var_frequencies = TRUE, # show x-var frequencies
   show_percentages = TRUE, # whether to show percentages in the bars
@@ -645,7 +672,7 @@ points(
   y = age_NAs_as_0,
   pch = 20 + as.numeric(metadata$dataset),
   cex = 1.2, lwd = 1.5,
-  col = adjustcolor(c(colors_gender, "grey"), .8)[as.numeric(gender_with_NA)]
+  bg = adjustcolor(colors_gender, .8)[as.numeric(gender_with_NA)]
 )
 bottom_coord <- grconvertY(0, from = "ndc", to = "user")
 top_coord <- grconvertY(1, from = "ndc", to = "user")
@@ -656,7 +683,7 @@ legend(
   xjust = 0.5, yjust = 0, bty = "n",
   title = "Gender",
   legend = levels(gender_with_NA),
-  fill = adjustcolor(c(colors_gender, "grey"), .8)
+  fill = adjustcolor(colors_gender, .8)
 )
 legend(
   x = mean(c(par("usr")[2], right_coord)),
@@ -702,7 +729,7 @@ points(
   y = age_NAs_as_0,
   pch = 20 + as.numeric(metadata$dataset),
   cex = 1.2, lwd = 1.5,
-  col = adjustcolor(colors_treatment, .8)[as.numeric(metadata$treatment)]
+  bg = adjustcolor(colors_treatment, .8)[as.numeric(metadata$treatment)]
 )
 bottom_coord <- grconvertY(0, from = "ndc", to = "user")
 top_coord <- grconvertY(1, from = "ndc", to = "user")
@@ -766,7 +793,7 @@ points(
   y = age_NAs_as_0,
   pch = 20 + as.numeric(gender_with_NA),
   cex = 1.2, lwd = 1.5,
-  col = adjustcolor(colors_response, .8)[as.numeric(metadata$response)]
+  bg = adjustcolor(colors_response, .8)[as.numeric(metadata$response)]
 )
 bottom_coord <- grconvertY(0, from = "ndc", to = "user")
 top_coord <- grconvertY(1, from = "ndc", to = "user")
