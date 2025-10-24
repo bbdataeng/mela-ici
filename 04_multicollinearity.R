@@ -2,32 +2,137 @@
 library(paletteer)
 library(corrplot)
 library(writexl)
+source("plotPCA.R")
 
 # Prepare folder for figures ----------------------------------------------
 output_folder <- "nonsync/04_multicollinearity"
 if (!dir.exists(output_folder)) dir.create(output_folder)
 
 # Load clean data ---------------------------------------------------------
-metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds")
-xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds")
+metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds") |> as.data.frame()
+xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds") |> as.data.frame()
 
-cell_types <- colnames(xdata)
+# add a level "Unknown" to unknown gender
+metadata$gender <- addNA(metadata$gender)
+levels(metadata$gender)[nlevels(metadata$gender)] <- "Unknown"
+
+# add a level "Unknown" to unknown enrichment protocol
+metadata$enrichment_protocol <- addNA(metadata$enrichment_protocol)
+levels(metadata$enrichment_protocol)[nlevels(metadata$enrichment_protocol)] <- "Unknown"
 
 # sanitize cell types names
+cell_types <- colnames(xdata)
 cell_types_sanitized <- gsub(" ", "_", cell_types)
 cell_types_sanitized <- gsub("\\(|\\)", "", cell_types_sanitized)
-# colnames(xdata) <- cell_types_sanitized
 
 # put all data together
 alldata <- cbind(metadata, xdata)
-rm(metadata, xdata) # just to free some memory
 
-# exclude biopsies on treatment
-testdata <- subset(alldata, biopsy_time == "PRE-ICB") |> droplevels()
-nrow(testdata) # now 170 rows
 
 # Plot settings -----------------------------------------------------------
 resol <- 300
+transparency_colors <- 0.8
+
+# prepare colors for response
+colors_response <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_response) <- levels(metadata$response)
+
+# prepare colors for response_group
+colors_response_group <- paletteer_d("ggsci::default_jama", nlevels(metadata$response_group)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_response_group) <- levels(metadata$response_group)
+
+# prepare colors for sex
+colors_gender <- paletteer_d("RColorBrewer::Dark2", nlevels(metadata$gender)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_gender) <- levels(metadata$gender)
+colors_gender["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
+
+# prepare colors for enrichment protocol
+colors_enrichment_protocol <- paletteer_d("ggsci::default_igv", nlevels(metadata$enrichment_protocol)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_enrichment_protocol) <- levels(metadata$enrichment_protocol)
+colors_enrichment_protocol["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
+
+# prepare colors for dataset
+colors_dataset <- paletteer_d("ggsci::default_nejm", nlevels(metadata$dataset)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_dataset) <- levels(metadata$dataset)
+
+# prepare colors for treatment
+colors_treatment <- paletteer_d("ggsci::default_jco", nlevels(metadata$treatment)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_treatment) <- levels(metadata$treatment)
+
+
+# PCA ---------------------------------------------------------------------
+
+# log-transform data
+trdata <- as.matrix(xdata)
+trdata <- log(trdata + 0.001) # log transform adding a small epsilon to avoid log(0)
+
+# scale data to a mean of 0 and sd of 1 for each column (i.e, cell type)
+trdata <- scale(trdata)
+apply(trdata, 2, mean) |> round(3) # each column has mean ~ 0
+apply(trdata, 2, sd) |> round(3) # each column has sd ~ 1
+stopifnot(all(is.finite(trdata))) # no "bad" values
+
+# run PCA
+pca <- prcomp(trdata, center = FALSE, scale. = FALSE)
+
+# prepare folder for PCA results
+pca_folder <- file.path(output_folder, "PCA")
+if (!dir.exists(pca_folder)) dir.create(pca_folder)
+
+# export pca results
+saveRDS(pca, file.path(pca_folder, "results_pca.rds"))
+
+# plot PCs
+pcs_to_plot <- paste0("PC", 1:3)
+combinations <- combn(pcs_to_plot, 2) |>
+  as.data.frame() |>
+  as.list()
+for (combination in combinations) {
+  plot_pca_factor(
+    pca_res = pca, # output of prcomp()
+    PCs_to_plot = combination, # PCs to plot on X and Y axis respectively
+    metadata = metadata, # dataframe of metadata (rows matching PCA data)
+    vars_to_use = c( # which variables (columns of metadata) should be used?
+      "response", "response_group", "treatment", "gender", "enrichment_protocol", "dataset"
+    ),
+    colors_vars_list = list( # list of colors for the variables
+      response = colors_response,
+      response_group = colors_response_group,
+      treatment = colors_treatment,
+      gender = colors_gender,
+      enrichment_protocol = colors_enrichment_protocol,
+      dataset = colors_dataset
+    ),
+    par_mar = c(2.5, 2.5, 2.5, 8), # graphical parameters par("mar")
+    dark_theme = FALSE, # set to true to have dark theme
+    pt.cex = 1.3, # point size
+    equal_axis_scale = FALSE, # set to TRUE to force same scaling of the X and Y axes
+    legend_cex = 0.7, # relative dimension of the legend
+    legend_ncols = 1, # columns to split the legend in
+    output_folder = pca_folder, # folder to save the plots
+    file_format = "png", # file format
+    res_ppi = 300, # resolution (pixels per inch)
+    width_in = 6, height_in = 4 # width and height of the plot in inches
+  )
+}
+# TODO: biplots
+
+# scree plot
+percentVar <- round(pca$sdev^2 / sum(pca$sdev^2) * 100, 1)
+names(percentVar) <- colnames(pca$x)
+png(file.path(pca_folder, "scree_plot.png"),
+  width = 5 * resol, height = 4 * resol, res = resol
+)
+par(mar = c(3.5, 3, 0.5, 0.1), mgp = c(2, 0.8, 0), tcl = -0.3)
+barplot(percentVar, las = 2, ylab = "% of total variance explained")
+dev.off()
+
 
 # Inspect collinearity between predictors ---------------------------------
 
@@ -35,7 +140,6 @@ resol <- 300
 hclust_height_thr <- 0.5
 
 # correlation matrix of cell types
-xdata <- as.matrix(testdata[, cell_types])
 all(complete.cases(xdata)) # no missing values
 cormat <- cor(xdata, method = "spearman") # calculate Spearman correlation
 
@@ -178,10 +282,10 @@ for (i in seq_len(nrow(strong_cor_df))) {
     "scatter.", i, ".", x_cell, "-", y_cell, ".png"
   )), height = 4.5 * resol, width = 4 * resol, res = resol)
   plot(
-    x = rank(testdata[, x_cell]), y = rank(testdata[, y_cell]),
+    x = rank(xdata[, x_cell]), y = rank(xdata[, y_cell]),
     las = 1, xlab = paste(x_cell, "(Rank)"), ylab = paste(y_cell, "(Rank)"), asp = 1,
     main = paste0("Spearman correlation = ", strong_cor_df$spearman_correlation[i]),
-    pch = 21, bg = grey(0.5, 0.3)
+    pch = 21, bg = colors_dataset[as.numeric(metadata$dataset)]
   )
   dev.off()
 }
