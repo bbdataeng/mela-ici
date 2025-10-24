@@ -3,6 +3,7 @@ library(readxl)
 library(writexl)
 library(car)
 library(gtools)
+library(tidyverse)
 
 # Prepare folder for cleaned data -----------------------------------------
 output_folder <- "nonsync/01_clean_data"
@@ -339,14 +340,33 @@ xdata <- xdata[!is.na(xdata$response), ] |> droplevels()
 # exclude biopsies made during treatment
 xdata <- subset(xdata, biopsy_time == "PRE-ICB") |> droplevels()
 
-# keep only one biopsy per patient
-keep <- rep(TRUE, nrow(xdata))
-for (i in 2:nrow(xdata)) {
-  if (xdata$patient_id[i] == xdata$patient_id[[i - 1]]) {
-    keep[i] <- FALSE
-  }
-}
-xdata <- xdata[keep, ] |> droplevels()
+# # keep only one biopsy per patient
+# keep <- rep(TRUE, nrow(xdata))
+# for (i in 2:nrow(xdata)) {
+#   if (xdata$patient_id[i] == xdata$patient_id[[i - 1]]) {
+#     keep[i] <- FALSE
+#   }
+# }
+# xdata <- xdata[keep, ] |> droplevels()
+            
+# List of preferred samples (highest number of reads)
+preferred_samples <- c("SRR7344567", "SRR7344565", "SRR3184298")
+
+# Keep only:
+# - preferred samples if patient has multiple samples
+# - all other samples for patients with only one
+xdata <- xdata %>%
+  group_by(patient_id) %>%
+  filter(
+    if(n_distinct(sample_name) > 1) {
+      accession %in% preferred_samples
+    } else {
+      TRUE
+    }
+  ) %>%
+  ungroup() %>%
+  droplevels()
+             
 table(table(xdata$patient_id)) # only 1 biopsy per patient, as expected
 
 # Export xdata ---------------------------------------------------------
