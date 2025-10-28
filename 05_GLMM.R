@@ -455,7 +455,8 @@ capture.output(
 
 
 
-# Plots -------------------------------------------------------------------
+
+# Plots showing PCs -------------------------------------------------------
 
 for (var_to_plot in paste0("PC", 1:n_pcs)) {
   xx_path <- file.path(
@@ -537,6 +538,63 @@ for (var_to_plot in paste0("PC", 1:n_pcs)) {
     width_in = 6, height_in = 6 # width and height of the plot in inches
   )
 }
+
+
+# Plots showing age and gender --------------------------------------------
+
+# age
+plot_glmer_fitted_continuous(
+  model = full_bin_glmm_all, # binomial model fitted with lme4::glmer()
+  model_formula = model_formula_all, # formula used to fit the model
+  results_table = restab_all, # results_table, output of get_results_table()
+  data = data_all, # data used to fit the model
+  bootstrap_object = boot_full_bin_glmm_all, # bootstrap object returned by boot.glmm.pred()
+  link = "logit", # link function
+  covariate_to_plot = "z.age", # which covariate should be plotted
+  fitted_resolution = 100, # resolution of calculated fitted values
+  file_path = file.path(folder_all_predictors, "fitted_z.age.png"), # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 7, height_in = 4 # width and height of the plot in inches
+)
+plot_glmer_fitted_continuous(
+  model = full_bin_glmm_w0_gender, # binomial model fitted with lme4::glmer()
+  model_formula = model_formula_w0_gender, # formula used to fit the model
+  results_table = restab_w0_gender, # results_table, output of get_results_table()
+  data = data_w0_gender, # data used to fit the model
+  bootstrap_object = boot_full_bin_glmm_w0_gender, # bootstrap object returned by boot.glmm.pred()
+  link = "logit", # link function
+  covariate_to_plot = "z.age", # which covariate should be plotted
+  fitted_resolution = 100, # resolution of calculated fitted values
+  file_path = file.path(folder_w0_gender, "fitted_z.age.png"), # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 7, height_in = 4 # width and height of the plot in inches
+)
+
+# gender
+plot_glmer_fitted_categorical(
+  model = full_bin_glmm_all, # binomial model fitted with lme4::glmer()
+  model_formula = model_formula_all, # formula used to fit the model
+  results_table = restab_all, # results_table, output of get_results_table()
+  data = data_all, # data used to fit the model
+  bootstrap_object = boot_full_bin_glmm_all, # bootstrap object returned by boot.glmm.pred()
+  link = "logit", # link function
+  variable_to_plot = "gender", # which variable should be plotted
+  file_path = file.path(folder_all_predictors, "fitted_gender.png"), # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 7, height_in = 4 # width and height of the plot in inches
+)
+plot_glmer_fitted_categorical(
+  model = full_bin_glmm_w0_age, # binomial model fitted with lme4::glmer()
+  model_formula = model_formula_w0_age, # formula used to fit the model
+  results_table = restab_w0_age, # results_table, output of get_results_table()
+  data = data_w0_age, # data used to fit the model
+  bootstrap_object = boot_full_bin_glmm_w0_age, # bootstrap object returned by boot.glmm.pred()
+  link = "logit", # link function
+  variable_to_plot = "gender", # which variable should be plotted
+  file_path = file.path(folder_w0_age, "fitted_gender.png"), # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 7, height_in = 4 # width and height of the plot in inches
+)
 
 
 
