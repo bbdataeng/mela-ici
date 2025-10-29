@@ -490,9 +490,6 @@ dev.off()
 
 
 
-
-"rRNA-depletion"        "targeted-mRNA-capture" "polyA-selection"       NA
-
 ```{r}
 coldata <- read_csv(file.path(main_folder,"clean_metadata.csv"), show_col_types=F) %>%
   select(-response) %>%
