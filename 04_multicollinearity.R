@@ -11,6 +11,7 @@ if (!dir.exists(output_folder)) dir.create(output_folder)
 # Load clean data ---------------------------------------------------------
 metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds") |> as.data.frame()
 xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds") |> as.data.frame()
+hed_data <- readRDS("nonsync/01_clean_data/clean_hed.rds") |> as.data.frame()
 
 # add a level "Unknown" to unknown gender
 metadata$gender <- addNA(metadata$gender)
@@ -26,7 +27,7 @@ cell_types_sanitized <- gsub(" ", "_", cell_types)
 cell_types_sanitized <- gsub("\\(|\\)", "", cell_types_sanitized)
 
 # put all data together
-alldata <- cbind(metadata, xdata)
+alldata <- cbind(metadata, hed_data, xdata)
 
 
 # Plot settings -----------------------------------------------------------
@@ -133,6 +134,31 @@ par(mar = c(3.5, 3, 0.5, 0.1), mgp = c(2, 0.8, 0), tcl = -0.3)
 barplot(percentVar, las = 2, ylab = "% of total variance explained")
 dev.off()
 
+
+# Correlation between all numeric variables -------------------------------
+
+numeric_variables <- names(alldata)[sapply(alldata, is.numeric)]
+cormat_all <- cor(alldata[, numeric_variables],
+  method = "spearman",
+  use = "pairwise.complete.obs"
+)
+png(file.path(output_folder, "corrplot_all_numeric.png"),
+  width = 8 * resol, height = 6 * resol, res = resol
+)
+corrplot(
+  cormat_all,
+  order = "original",
+  col = paletteer_c("grDevices::RdBu", 150, direction = -1),
+  tl.col = "black", tl.cex = 0.8, tl.srt = 45,
+  method = "circle",
+  type = "full",
+  is.corr = TRUE,
+  title = "Spearman correlation matrix",
+  diag = TRUE,
+  outline = FALSE,
+  mar = c(0, 0, 1.5, 0)
+)
+dev.off()
 
 # Inspect collinearity between predictors ---------------------------------
 

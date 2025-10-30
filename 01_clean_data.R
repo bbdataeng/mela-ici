@@ -348,7 +348,7 @@ xdata <- subset(xdata, biopsy_time == "PRE-ICB") |> droplevels()
 #   }
 # }
 # xdata <- xdata[keep, ] |> droplevels()
-            
+
 # List of preferred samples (highest number of reads)
 preferred_samples <- c("SRR7344567", "SRR7344565", "SRR3184298")
 
@@ -358,7 +358,7 @@ preferred_samples <- c("SRR7344567", "SRR7344565", "SRR3184298")
 xdata <- xdata %>%
   group_by(patient_id) %>%
   filter(
-    if(n_distinct(sample_name) > 1) {
+    if (n_distinct(sample_name) > 1) {
       accession %in% preferred_samples
     } else {
       TRUE
@@ -366,24 +366,46 @@ xdata <- xdata %>%
   ) %>%
   ungroup() %>%
   droplevels()
-             
+
 table(table(xdata$patient_id)) # only 1 biopsy per patient, as expected
+
+
+# Add HED data ------------------------------------------------------------
+
+hed_data <- read.table("nonsync/00_raw_data/HED.tsv", header = TRUE) |>
+  strings2factors(verbose = FALSE) # convert character columns to factors
+head(hed_data)
+
+names(hed_data)
+names(hed_data) <- c("accession", paste0("HED_locus", LETTERS[1:3]), "HED_mean")
+
+xx <- merge(xdata, hed_data, by = "accession", all.x = TRUE)
+all(complete.cases(xx[, grepv("^HED", names(xx))])) # no missing values, safe to merge
+xdata <- xx
+rownames(xdata) <- xdata$accession
+rm(xx)
+
 
 # Export xdata ---------------------------------------------------------
 
+# extract HED data
+hed_data <- xdata[, grepv("^HED", names(xdata))]
+
 # extract metadata
-metadata <- xdata[, setdiff(names(xdata), cibersortx_cols)]
+metadata <- xdata[, setdiff(names(xdata), c(cibersortx_cols, names(hed_data)))]
 
 # extract cibersortx data
 cibersortx_data <- xdata[, cibersortx_cols]
 
 # as RDS
 saveRDS(metadata, file.path(output_folder, "clean_metadata.rds"))
+saveRDS(hed_data, file.path(output_folder, "clean_hed.rds"))
 saveRDS(cibersortx_data, file.path(output_folder, "clean_cibersortx.rds"))
 saveRDS(xdata, file.path(output_folder, "clean_alldata.rds"))
 
 # as CSV
 write.csv(metadata, file.path(output_folder, "clean_metadata.csv"), row.names = FALSE)
+write.csv(hed_data, file.path(output_folder, "clean_hed.csv"), row.names = TRUE)
 write.csv(cibersortx_data, file.path(output_folder, "clean_cibersortx.csv"), row.names = TRUE)
 write.csv(xdata, file.path(output_folder, "clean_alldata.csv"), row.names = FALSE)
 
