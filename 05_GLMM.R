@@ -29,6 +29,9 @@ for (xx in ls(pattern = "^folder")) { # create folders
 # Load and prepare data ---------------------------------------------------
 metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds") |> as.data.frame()
 
+# load HED data
+hed_data <- readRDS("nonsync/01_clean_data/clean_hed.rds") |> as.data.frame()
+
 # load PCs of cibersortx data
 pca_cibersortx <- readRDS("nonsync/04_multicollinearity/PCA/results_pca.rds")
 pcs_data_cibersortx <- pca_cibersortx$x |> as.data.frame()
@@ -41,8 +44,8 @@ n_pcs <- which(cumulative_proportion >= 0.8) |>
   as.numeric()
 n_pcs
 
-# merge metadata and first PCs
-testdata <- cbind(metadata, pcs_data_cibersortx[, 1:n_pcs])
+# merge metadata, HED data, and first PCs
+testdata <- cbind(metadata, hed_data, pcs_data_cibersortx[, 1:n_pcs])
 
 # which columns have NAs?
 testdata |>
@@ -60,6 +63,13 @@ testdata$response_group <- factor( # response_group non-ordered
 # remove column enrichment protocol (highly collinear with dataset, NAs present)
 testdata <- testdata[, names(testdata) != "enrichment_protocol"]
 
+# remove columns not included in the analysis
+testdata <- testdata[, setdiff(names(testdata), c(
+  "accession", "patient_id", "sample_name", "response", "treatment",
+  "biopsy_time", "HED_mean"
+))]
+
+
 # Get subsets without NAs for specific variables --------------------------
 
 # data without column "gender"
@@ -72,18 +82,11 @@ data_w0_age <- testdata[, setdiff(names(testdata), "age")]
 data_w0_age_gender <- testdata[, setdiff(names(testdata), c("age", "gender"))]
 
 # keep only complete case in each dataset
-data_all <- testdata |>
-  na.omit() |>
-  droplevels()
-data_w0_gender <- data_w0_gender |>
-  na.omit() |>
-  droplevels()
-data_w0_age <- data_w0_age |>
-  na.omit() |>
-  droplevels()
-data_w0_age_gender <- data_w0_age_gender |>
-  na.omit() |>
-  droplevels()
+data_all <- testdata[complete.cases(testdata), ] |> droplevels()
+data_w0_gender <- data_w0_gender[complete.cases(data_w0_gender), ] |> droplevels()
+data_w0_age <- data_w0_age[complete.cases(data_w0_age), ] |> droplevels()
+data_w0_age_gender <- data_w0_age_gender[complete.cases(data_w0_age_gender), ] |> droplevels()
+
 
 # check which datasets are left
 data_all$dataset |>
@@ -102,26 +105,17 @@ data_w0_age_gender$dataset |>
 
 # Prepare test data for LMM -----------------------------------------------
 
-# inspect data tabulations with 6-level response
-table(testdata$response, useNA = "ifany") |> plot() # not very balanced
-table(testdata$treatment, testdata$response, useNA = "ifany") # quite unbalanced and many 0s: not ideal
-table(testdata$gender, testdata$response, useNA = "ifany") # not too bad but no gender info on PRCR response
-
 # inspect data tabulations with 2-level response
 table(testdata$response_group, useNA = "ifany") |> plot() # very good
-table(testdata$treatment, testdata$response_group, useNA = "ifany") # quite unbalanced: not ideal
-table(testdata$biopsy_time, testdata$response_group, useNA = "ifany") # not too bad
 table(testdata$gender, testdata$response_group, useNA = "ifany") # not too bad but many NAs in NR
 
 # inspect distribution of continuous variables
 hist(testdata$age) # ok
+par(mfrow = c(2, 2))
+for (xx in grepv("^HED", names(testdata))) hist(testdata[, xx], main = xx) # ok
 par(mfrow = c(2, 3))
 for (xx in grepv("^PC", names(testdata))) hist(testdata[, xx], main = xx)
 # nicely distributed
-
-# inspect levels of random effect predictors
-nlevels(testdata$patient_id) # 106 patients
-nlevels(testdata$dataset) # 3 datasets
 
 # z-scale numeric predictors (age)
 data_all$z.age <- data_all$age |>
@@ -130,74 +124,40 @@ data_all$z.age <- data_all$age |>
 data_w0_gender$z.age <- data_w0_gender$age |>
   scale() |>
   as.vector()
-
-# prepare numeric version of 6-level response
-data_all$numeric_response <- as.numeric(data_all$response)
-data_w0_gender$numeric_response <- as.numeric(data_w0_gender$response)
-data_w0_age$numeric_response <- as.numeric(data_w0_age$response)
-data_w0_age_gender$numeric_response <- as.numeric(data_w0_age_gender$response)
-
-# center it
-data_all$numeric_response <- data_all$numeric_response - mean(data_all$numeric_response)
-data_w0_gender$numeric_response <- data_w0_gender$numeric_response - mean(data_w0_gender$numeric_response)
-data_w0_age$numeric_response <- data_w0_age$numeric_response - mean(data_w0_age$numeric_response)
-data_w0_age_gender$numeric_response <- data_w0_age_gender$numeric_response - mean(data_w0_age_gender$numeric_response)
-
-# see new numeric response
-par(mfrow = c(2, 2), las = 1)
-data_all$numeric_response |>
-  round(digits = 3) |>
-  table() |>
-  plot(
-    main = "data_all", ylab = "Frequency", xlab = "Response"
-  )
-data_w0_gender$numeric_response |>
-  round(digits = 3) |>
-  table() |>
-  plot(
-    main = "data_w0_gender", ylab = "Frequency", xlab = "Response"
-  )
-data_w0_age$numeric_response |>
-  round(digits = 3) |>
-  table() |>
-  plot(
-    main = "data_w0_age", ylab = "Frequency", xlab = "Response"
-  )
-data_w0_age_gender$numeric_response |>
-  round(digits = 3) |>
-  table() |>
-  plot(
-    main = "data_w0_age_gender", ylab = "Frequency", xlab = "Response"
-  )
-
+for (xcol in grepv("^HED", names(testdata))) {
+  data_all[, paste0("z.", xcol)] <- as.vector(scale(data_all[, xcol]))
+  data_w0_age[, paste0("z.", xcol)] <- as.vector(scale(data_w0_age[, xcol]))
+  data_w0_gender[, paste0("z.", xcol)] <- as.vector(scale(data_w0_gender[, xcol]))
+  data_w0_age_gender[, paste0("z.", xcol)] <- as.vector(scale(data_w0_age_gender[, xcol]))
+}
 
 
 # Fit binomial GLMMs ------------------------------------------------------
 
 # define model formula and write them as txt
-model_formula_all <- paste("response_group ~ z.age + gender",
+model_formula_all <- paste(
+  "response_group ~ z.age + gender + z.HED_locusA + z.HED_locusB + z.HED_locusC",
   paste(grepv("^PC", names(testdata)), collapse = " + "),
   "(1 | dataset)",
   sep = " + "
 ) |> as.formula()
-as.character(model_formula_all)[2:3] |>
-  paste(collapse = " ~ ") |>
-  writeLines(file.path(folder_all_predictors, "model_formula.txt"))
-
-model_formula_w0_age <- paste("response_group ~ gender",
+model_formula_w0_age <- paste(
+  "response_group ~ gender + z.HED_locusA + z.HED_locusB + z.HED_locusC",
   paste(grepv("^PC", names(testdata)), collapse = " + "),
   "(1 | dataset)",
   sep = " + "
 ) |> as.formula()
-model_formula_w0_gender <- paste("response_group ~ z.age",
+model_formula_w0_gender <- paste(
+  "response_group ~ z.age + z.HED_locusA + z.HED_locusB + z.HED_locusC",
   paste(grepv("^PC", names(testdata)), collapse = " + "),
   "(1 | dataset)",
   sep = " + "
 ) |> as.formula()
-model_formula_w0_age_gender <- paste("response_group ~ ",
+model_formula_w0_age_gender <- paste(
+  "response_group ~ z.HED_locusA + z.HED_locusB + z.HED_locusC",
   paste(grepv("^PC", names(testdata)), collapse = " + "),
-  " + (1 | dataset)",
-  sep = ""
+  "(1 | dataset)",
+  sep = " + "
 ) |> as.formula()
 
 # fit models
@@ -296,7 +256,7 @@ m.stab.plot(stability_full_bin_glmm_all$summary[, -1])
 dev.off()
 
 stability_full_bin_glmm_w0_age <- glmm.model.stab(model.res = full_bin_glmm_w0_age)
-table(stability_full_bin_glmm_w0_age$detailed$lme4.warnings) # 3 singular fits
+table(stability_full_bin_glmm_w0_age$detailed$lme4.warnings) # 2 singular fits
 stability_full_bin_glmm_w0_age$summary[, -1] |>
   as.matrix() |>
   round(3) |>
@@ -320,7 +280,7 @@ m.stab.plot(stability_full_bin_glmm_w0_gender$summary[, -1])
 dev.off()
 
 stability_full_bin_glmm_w0_age_gender <- glmm.model.stab(model.res = full_bin_glmm_w0_age_gender)
-table(stability_full_bin_glmm_w0_age_gender$detailed$lme4.warnings) # 2 singular fits
+table(stability_full_bin_glmm_w0_age_gender$detailed$lme4.warnings) # 1 singular fit
 stability_full_bin_glmm_w0_age_gender$summary[, -1] |>
   as.matrix() |>
   round(3) |>
@@ -472,10 +432,11 @@ for (var_to_plot in paste0("PC", 1:n_pcs)) {
     link = "logit", # link function
     fitted_resolution = 100, # resolution of calculated fitted values
     PC_to_plot = var_to_plot, # which PC should be plotted
-    show_loadings = TRUE, # add a panel with arrows showing feature loadings for that PC
+    n_top_feautures = 10, # optionally, an integer determining the number of top features to plot
     file_path = xx_path, # optional: path to save the plot
     res_ppi = 300, # resolution (pixels per inch)
-    width_in = 6, height_in = 6 # width and height of the plot in inches
+    relative_heights = c(2, 1), # relative heights of the two plot sections
+    width_in = 6, height_in = 5 # width and height of the plot in inches
   )
 }
 for (var_to_plot in paste0("PC", 1:n_pcs)) {
@@ -492,10 +453,11 @@ for (var_to_plot in paste0("PC", 1:n_pcs)) {
     link = "logit", # link function
     fitted_resolution = 100, # resolution of calculated fitted values
     PC_to_plot = var_to_plot, # which PC should be plotted
-    show_loadings = TRUE, # add a panel with arrows showing feature loadings for that PC
+    n_top_feautures = 10, # optionally, an integer determining the number of top features to plot
     file_path = xx_path, # optional: path to save the plot
     res_ppi = 300, # resolution (pixels per inch)
-    width_in = 6, height_in = 6 # width and height of the plot in inches
+    relative_heights = c(2, 1), # relative heights of the two plot sections
+    width_in = 6, height_in = 5 # width and height of the plot in inches
   )
 }
 for (var_to_plot in paste0("PC", 1:n_pcs)) {
@@ -512,10 +474,11 @@ for (var_to_plot in paste0("PC", 1:n_pcs)) {
     link = "logit", # link function
     fitted_resolution = 100, # resolution of calculated fitted values
     PC_to_plot = var_to_plot, # which PC should be plotted
-    show_loadings = TRUE, # add a panel with arrows showing feature loadings for that PC
+    n_top_feautures = 10, # optionally, an integer determining the number of top features to plot
     file_path = xx_path, # optional: path to save the plot
     res_ppi = 300, # resolution (pixels per inch)
-    width_in = 6, height_in = 6 # width and height of the plot in inches
+    relative_heights = c(2, 1), # relative heights of the two plot sections
+    width_in = 6, height_in = 5 # width and height of the plot in inches
   )
 }
 for (var_to_plot in paste0("PC", 1:n_pcs)) {
@@ -532,13 +495,69 @@ for (var_to_plot in paste0("PC", 1:n_pcs)) {
     link = "logit", # link function
     fitted_resolution = 100, # resolution of calculated fitted values
     PC_to_plot = var_to_plot, # which PC should be plotted
-    show_loadings = TRUE, # add a panel with arrows showing feature loadings for that PC
+    n_top_feautures = 10, # optionally, an integer determining the number of top features to plot
     file_path = xx_path, # optional: path to save the plot
     res_ppi = 300, # resolution (pixels per inch)
-    width_in = 6, height_in = 6 # width and height of the plot in inches
+    relative_heights = c(2, 1), # relative heights of the two plot sections
+    width_in = 6, height_in = 5 # width and height of the plot in inches
   )
 }
 
+# Plots showing HED data --------------------------------------------------
+for (xvar in c("z.HED_locusA", "z.HED_locusB", "z.HED_locusC")) {
+  plot_glmer_fitted_continuous(
+    model = full_bin_glmm_all, # binomial model fitted with lme4::glmer()
+    model_formula = model_formula_all, # formula used to fit the model
+    results_table = restab_all, # results_table, output of get_results_table()
+    data = data_all, # data used to fit the model
+    bootstrap_object = boot_full_bin_glmm_all, # bootstrap object returned by boot.glmm.pred()
+    link = "logit", # link function
+    covariate_to_plot = xvar, # which covariate should be plotted
+    fitted_resolution = 100, # resolution of calculated fitted values
+    file_path = file.path(folder_all_predictors, paste0("fitted_", xvar, ".png")), # optional: path to save the plot
+    res_ppi = 300, # resolution (pixels per inch)
+    width_in = 7, height_in = 4 # width and height of the plot in inches
+  )
+  plot_glmer_fitted_continuous(
+    model = full_bin_glmm_w0_gender, # binomial model fitted with lme4::glmer()
+    model_formula = model_formula_w0_gender, # formula used to fit the model
+    results_table = restab_w0_gender, # results_table, output of get_results_table()
+    data = data_w0_gender, # data used to fit the model
+    bootstrap_object = boot_full_bin_glmm_w0_gender, # bootstrap object returned by boot.glmm.pred()
+    link = "logit", # link function
+    covariate_to_plot = xvar, # which covariate should be plotted
+    fitted_resolution = 100, # resolution of calculated fitted values
+    file_path = file.path(folder_w0_gender, paste0("fitted_", xvar, ".png")), # optional: path to save the plot
+    res_ppi = 300, # resolution (pixels per inch)
+    width_in = 7, height_in = 4 # width and height of the plot in inches
+  )
+  plot_glmer_fitted_continuous(
+    model = full_bin_glmm_w0_age, # binomial model fitted with lme4::glmer()
+    model_formula = model_formula_w0_age, # formula used to fit the model
+    results_table = restab_w0_age, # results_table, output of get_results_table()
+    data = data_w0_age, # data used to fit the model
+    bootstrap_object = boot_full_bin_glmm_w0_age, # bootstrap object returned by boot.glmm.pred()
+    link = "logit", # link function
+    covariate_to_plot = xvar, # which covariate should be plotted
+    fitted_resolution = 100, # resolution of calculated fitted values
+    file_path = file.path(folder_w0_age, paste0("fitted_", xvar, ".png")), # optional: path to save the plot
+    res_ppi = 300, # resolution (pixels per inch)
+    width_in = 7, height_in = 4 # width and height of the plot in inches
+  )
+  plot_glmer_fitted_continuous(
+    model = full_bin_glmm_w0_age_gender, # binomial model fitted with lme4::glmer()
+    model_formula = model_formula_w0_age_gender, # formula used to fit the model
+    results_table = restab_w0_age_gender, # results_table, output of get_results_table()
+    data = data_w0_age_gender, # data used to fit the model
+    bootstrap_object = boot_full_bin_glmm_w0_age_gender, # bootstrap object returned by boot.glmm.pred()
+    link = "logit", # link function
+    covariate_to_plot = xvar, # which covariate should be plotted
+    fitted_resolution = 100, # resolution of calculated fitted values
+    file_path = file.path(folder_w0_age_gender, paste0("fitted_", xvar, ".png")), # optional: path to save the plot
+    res_ppi = 300, # resolution (pixels per inch)
+    width_in = 7, height_in = 4 # width and height of the plot in inches
+  )
+}
 
 # Plots showing age and gender --------------------------------------------
 
