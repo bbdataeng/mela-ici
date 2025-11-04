@@ -8,9 +8,10 @@ plot_glmer_fitted_PCA <- function(
     link = "logit", # link function
     fitted_resolution = 100, # resolution of calculated fitted values
     PC_to_plot = "PC1", # which PC should be plotted
-    show_loadings = TRUE, # add a panel with arrows showing feature loadings for that PC
+    n_top_feautures = NULL, # optionally, an integer determining the number of top features to plot
     file_path = NULL, # optional: path to save the plot
     res_ppi = 300, # resolution (pixels per inch)
+    relative_heights = c(2, 1), # relative heights of the two plot sections
     width_in = 8, height_in = 8 # width and height of the plot in inches
     ) {
   # check that the directory exists
@@ -59,6 +60,7 @@ plot_glmer_fitted_PCA <- function(
   # extract rotation values
   rot <- pca_results[["rotation"]][, PC_to_plot]
   rot <- rot[order(abs(rot), decreasing = TRUE)] # order by decreasing magnitude
+  if (!is.null(n_top_feautures)) rot <- head(rot, n_top_feautures)
 
   ### prepare stats ###
   r <- results_table[PC_to_plot, , drop = FALSE]
@@ -120,8 +122,12 @@ plot_glmer_fitted_PCA <- function(
   }
 
   # graphical parameters
+  layout(
+    mat = matrix(c(1, 1, 2, 3), nrow = 2, byrow = TRUE),
+    heights = relative_heights, widths = c(2, 1)
+  )
   par(
-    las = 1, mfrow = c(2, 1), mar = c(3.5, 4, 0.5, 4),
+    las = 1, mar = c(3.5, 4, 0.5, 4),
     mgp = c(2.5, 0.8, 0), tcl = -0.3, xpd = FALSE
   )
 
@@ -150,7 +156,7 @@ plot_glmer_fitted_PCA <- function(
 
 
   # bottom plot: PCA loadings
-  par(mar = c(2.5, 2, 0.5, 12), mgp = c(1.5, 0.6, 0))
+  par(mar = c(2.5, 2, 0.5, 1), mgp = c(1.5, 0.6, 0))
   plot(NULL,
     xlab = paste("PCA loadings for", PC_to_plot), ylab = "",
     xlim = c(-max_rotation, max_rotation),
@@ -168,7 +174,7 @@ plot_glmer_fitted_PCA <- function(
     x = rep(0, length(rot)), y = seq_along(rot),
     pos = ifelse(rot >= 0, 2, 4),
     labels = names(rot),
-    cex = scales::rescale(abs(rot), to = c(0.4, 0.8)),
+    cex = (abs(rot) / max(abs(rot))) * 0.7 + 0.3,
     xpd = NA
   )
   legend("bottomright",
@@ -178,10 +184,12 @@ plot_glmer_fitted_PCA <- function(
 
 
   # add statistics
-  par(xpd = TRUE)
+  par(mar = c(2.5, 0.5, 0.5, 0.5), mgp = c(1.5, 0.6, 0), xpd = TRUE)
+  plot(NULL,
+    xlab = "", ylab = "", xlim = c(-1, 1), ylim = c(-1, 1), axes = FALSE
+  )
   legend(
-    x = mean(c(par("usr")[2], grconvertX(1, from = "ndc", to = "user"))),
-    y = mean(par("usr")[3:4]),
+    x = 0, y = 0,
     legend = lines_txt, text.col = "black", cex = 0.9, bty = "n",
     xjust = 0.5, yjust = 0.5,
     title = paste("Model results for", PC_to_plot)
