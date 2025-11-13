@@ -1,6 +1,9 @@
 # nonsync folder (for figures, tables, data, etc. that should not be synced)
 nonsync/
 
+# folder for Roger Mundry's R functions on linear models
+functions_GLMMs/
+
 # History files
 .Rhistory
 .Rapp.history
