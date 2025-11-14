@@ -3,6 +3,7 @@
 # Load libraries ----------------------------------------------------------
 library(ranger) # v0.17.0
 library(ordinalForest) # v2.4-4
+source("rf_functions.R")
 # library(ggplot2)
 # library(irr) # v0.84.1
 # library(pROC) # v1.19.0.1
@@ -261,6 +262,42 @@ for (i in seq_len(nrow(to_do))) {
   )
 }
 
+
+# Get confusion matrices --------------------------------------------------
+confusion_matrices <- lapply( # list of confusion matrices
+  X = seq_len(nrow(to_do)),
+  FUN = function(i) {
+    get_confusion_matrix(
+      rf_object = get(to_do$rf[i]),
+      testdata = get(to_do$df_test[i]),
+      show_sum = TRUE
+    )
+  }
+)
+names(confusion_matrices) <- to_do$rf
+
+# Get accuracy metrics ----------------------------------------------------
+accuracy_metrics <- lapply( # list of accuracy metrics
+  X = seq_len(nrow(to_do)),
+  FUN = function(i) {
+    get_accuracy_metrics(
+      rf_object = get(to_do$rf[i]),
+      confusion_matrix = confusion_matrices[[i]],
+      positive_level = "R"
+    )
+  }
+)
+names(accuracy_metrics) <- to_do$rf
+
+# save confusion matrices and accuracy metrics in the respective folders
+for (i in seq_len(nrow(to_do))) {
+  sink(file.path(to_do$folder[i], "confusionMatrix_accuracyMetrics.txt"))
+  cat("===== Confusion Matrix =====", sep = "\n")
+  print(confusion_matrices[[i]])
+  cat("\n===== Accuracy Metrics =====", sep = "\n")
+  print(accuracy_metrics[[i]])
+  sink()
+}
 
 
 # Save image --------------------------------------------------------------
