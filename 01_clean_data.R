@@ -239,28 +239,51 @@ table(xdata$dataset) |> plot(las = 2, main = "dataset")
 
 # Clean data --------------------------------------------------------------
 
-### clean response ###
-table(xdata$response, useNA = "always") # have a look
-xdata$response[xdata$response == "UNK"] <- NA # turn "UNK" to NA
-xdata$response[xdata$response == "PRCR"] <- "R" # turn "PRCR" to "R"
-xdata$response <- xdata$response |>
+### clean 7-level response ###
+xx <- xdata$response
+table(xx, useNA = "always") # have a look
+xx[xx == "UNK"] <- NA # turn "UNK" to NA
+xdata$response_7levels <- xx |>
   droplevels() |> # remove unused "UNK" level
   factor( # reorder levels from worst to best
-    levels = c("PD", "NR", "SD", "PR", "R", "CR"),
+    levels = c("PD", "NR", "SD", "PR", "PRCR", "R", "CR"),
     ordered = TRUE
   )
-table(xdata$response, useNA = "always") # have a look
+table(xdata$response_7levels, useNA = "always") # have a look
 
-### clean response_group ###
-table(xdata$response_group, useNA = "always") # have a look
-xdata$response_group[xdata$response_group == "UNK"] <- NA # turn "UNK" to NA
-xdata$response_group <- xdata$response_group |>
+### create 6-level response ###
+xx <- xdata$response_7levels
+xx[xx == "PRCR" & !is.na(xx)] <- "R" # turn "PRCR" to "R"
+xdata$response_6levels <- droplevels(xx)
+table(xdata$response_6levels, useNA = "always") # have a look
+
+### create 3-level response ###
+xx <- xdata$response_7levels
+xx[xx %in% c("PD", "NR") & !is.na(xx)] <- "NR" # level 1: non-responder
+xx[xx %in% c("PR", "PRCR", "R", "CR") & !is.na(xx)] <- "R" # level 3: responder
+xdata$response_3levels <- droplevels(xx)
+table(xdata$response_3levels, useNA = "always") # have a look
+
+### clean binary response ###
+xx <- xdata$response_group
+table(xx, useNA = "always") # have a look
+xx[xx == "UNK"] <- NA # turn "UNK" to NA
+xdata$response_2levels <- xx |>
   droplevels() |> # remove unused "UNK" level
   factor( # reorder levels from worst to best
     levels = c("NR", "R"),
     ordered = TRUE
   )
-table(xdata$response_group, useNA = "always") # have a look
+table(xdata$response_2levels, useNA = "always") # have a look
+
+# reorder response columns
+cols_to_keep <- c(
+  "accession", "patient_id", "sample_name", "response_7levels",
+  "response_6levels", "response_3levels", "response_2levels",
+  "treatment", "biopsy_time", "age", "gender", "enrichment_protocol",
+  "dataset", cibersortx_cols
+)
+xdata <- xdata[, cols_to_keep]
 
 ### clean treatment ###
 table(xdata$treatment, useNA = "always") # have a look
@@ -335,19 +358,10 @@ xdata <- xdata[!xdata$on_dabrafenib_trametinib, ]
 xdata <- xdata[, setdiff(names(xdata), "on_dabrafenib_trametinib")]
 
 # exclude samples with unknown response
-xdata <- xdata[!is.na(xdata$response), ] |> droplevels()
+xdata <- xdata[!is.na(xdata$response_2levels), ] |> droplevels()
 
 # exclude biopsies made during treatment
 xdata <- subset(xdata, biopsy_time == "PRE-ICB") |> droplevels()
-
-# # keep only one biopsy per patient
-# keep <- rep(TRUE, nrow(xdata))
-# for (i in 2:nrow(xdata)) {
-#   if (xdata$patient_id[i] == xdata$patient_id[[i - 1]]) {
-#     keep[i] <- FALSE
-#   }
-# }
-# xdata <- xdata[keep, ] |> droplevels()
 
 # List of preferred samples (highest number of reads)
 preferred_samples <- c("SRR7344567", "SRR7344565", "SRR3184298")

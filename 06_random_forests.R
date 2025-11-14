@@ -17,7 +17,7 @@ if (!dir.exists(output_folder)) dir.create(output_folder)
 
 # define combinations of rf models to be created
 to_do <- expand.grid(
-  response_type = c("binary", "ordinal"),
+  response_type = c("binary", "ordinal3", "ordinal6"),
   technical_predictors = c(TRUE, FALSE),
   age_and_gender = c(TRUE, FALSE)
 )
@@ -61,7 +61,7 @@ hed_data |>
 
 # keep only necessary metadata columns
 metadata <- metadata[, c(
-  "accession", "response", "response_group",
+  "accession", "response_6levels", "response_3levels", "response_2levels",
   "age", "gender", "enrichment_protocol", "dataset"
 )]
 
@@ -80,16 +80,17 @@ alldata <- cbind(metadata, hed_data, xdata)
 rm(metadata, hed_data, xdata)
 
 # check response levels
-str(alldata$response) # ordered factor (6 levels)
-str(alldata$response_group) # ordered factor (2 levels)
-alldata$response_group <- factor( # response_group non-ordered
-  alldata$response_group,
+str(alldata$response_6levels) # ordered factor (6 levels)
+str(alldata$response_3levels) # ordered factor (3 levels)
+str(alldata$response_2levels) # ordered factor (2 levels)
+alldata$response_2levels <- factor( # response_2levels non-ordered
+  alldata$response_2levels,
   ordered = FALSE
 )
 
 # define new dataframe for each row of to_do
 to_do$df_all <- paste(
-  "df", "all", substr(to_do$response_type, 1, 3),
+  "df", "all", gsub("inal", "", to_do$response_type),
   as.numeric(to_do$technical_predictors),
   as.numeric(to_do$age_and_gender),
   sep = "_"
@@ -98,9 +99,11 @@ for (i in seq_len(nrow(to_do))) {
   vars_to_include <- names(alldata)
   # exclude columns
   if (to_do$response_type[i] == "binary") { # select binary response
-    vars_to_include <- setdiff(vars_to_include, c("response"))
-  } else { # or select ordinal response
-    vars_to_include <- setdiff(vars_to_include, c("response_group"))
+    vars_to_include <- setdiff(vars_to_include, c("response_6levels", "response_3levels"))
+  } else if (to_do$response_type[i] == "ordinal3") { # select 3-level ordinal response
+    vars_to_include <- setdiff(vars_to_include, c("response_6levels", "response_2levels"))
+  } else { # select 6-level ordinal response
+    vars_to_include <- setdiff(vars_to_include, c("response_3levels", "response_2levels"))
   }
   # exclude technical predictors when appropriate
   if (!to_do$technical_predictors[i]) {
@@ -119,7 +122,7 @@ for (i in seq_len(nrow(to_do))) {
     na.exclude() |>
     droplevels()
   # uniform response variable name
-  names(xx) <- gsub("response_group", "response", names(xx))
+  names(xx) <- gsub("response_.levels", "response", names(xx))
   # assign new object
   assign(x = to_do$df_all[i], value = xx)
 }
@@ -230,7 +233,7 @@ for (i in which(to_do$response_type == "binary")) {
 ls(pattern = "^rf_bin") # new random forests objects
 
 # get random forests on ordinal response
-for (i in which(to_do$response_type == "ordinal")) {
+for (i in which(to_do$response_type != "binary")) {
   # get predictors
   predictors <- to_do$formula[i] |>
     gsub(pattern = "response ~ ", replacement = "") |>
