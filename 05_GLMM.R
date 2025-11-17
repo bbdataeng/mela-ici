@@ -616,6 +616,91 @@ plot_glmer_fitted_categorical(
 )
 
 
+# Compare estimates -------------------------------------------------------
+
+# extract model terms names
+xterms <- rownames(restab_all)
+# create summary dataframe of model results
+estimates <- rbind(
+  data.frame( # model with all predictors
+    term = xterms,
+    model = "all_predictors",
+    restab_all,
+    row.names = NULL
+  ),
+  data.frame( # model without age
+    term = xterms,
+    model = "wo_age",
+    restab_w0_age[xterms, ],
+    row.names = NULL
+  ),
+  data.frame( # model without gender
+    term = xterms,
+    model = "wo_gender",
+    restab_w0_gender[xterms, ],
+    row.names = NULL
+  ),
+  data.frame( # model without age and gender
+    term = xterms,
+    model = "wo_age_and_gender",
+    restab_w0_age_gender[xterms, ],
+    row.names = NULL
+  )
+)
+# define range of estimate values
+xrange <- estimates[, c("Estimate", "lower_CI", "upper_CI")] |>
+  as.matrix() |>
+  range(na.rm = TRUE)
+# prepare data for plotting
+estimates$model <- factor(estimates$model, levels = c(
+  "all_predictors", "wo_age", "wo_gender", "wo_age_and_gender"
+))
+estimates$y <- seq_along(xterms)
+estimates$y <- estimates$y + (
+  as.numeric(estimates$model) - mean(as.numeric(estimates$model))
+) * 0.18
+# prepare colors
+xcols <- paletteer_d("RColorBrewer::Dark2", nlevels(estimates$model))
+names(xcols) <- levels(estimates$model)
+# create plot
+resol <- 300
+png(file.path(output_folder, "model_estimates.png"),
+  width = 8 * resol, height = 6 * resol, res = resol
+)
+par(mar = c(3, 7, 0.5, 0.5), las = 1, xpd = FALSE)
+plot(NULL,
+  ylim = c(length(xterms), 0) + 0.5, xlim = c(-max(abs(xrange)), max(abs(xrange))),
+  xlab = "", ylab = "", yaxt = "n", bty = "o", yaxs = "i"
+)
+xx <- seq(from = 1, to = length(xterms), by = 2) - 0.5
+rect( # add rectangles for improved visibility
+  xleft = rep(par("usr")[1], length(xx)),
+  xright = rep(par("usr")[2], length(xx)),
+  ybottom = xx, ytop = xx + 1, border = NA, col = grey(0.5, 0.2)
+)
+abline(v = 0, lty = 1, col = "grey40") # add vertical line at 0
+mtext(side = 1, text = "Estimate", line = par("mar")[1] - 1)
+mtext(side = 2, text = "Term", line = par("mar")[2] - 1, las = 0)
+axis(side = 2, at = seq_along(xterms), labels = xterms, tcl = 0)
+segments( # segments spanning over 95% CIs
+  x0 = estimates$lower_CI, x1 = estimates$upper_CI,
+  y0 = estimates$y, y1 = estimates$y,
+  col = xcols[estimates$model], lwd = 2
+)
+points( # points depicting estimates
+  x = estimates$Estimate, y = estimates$y,
+  pch = 18, cex = 1, col = xcols[estimates$model]
+)
+# add legend
+xx <- levels(estimates$model)
+xx <- paste0(xx, " (F", 1:4, ")")
+legend(
+  x = "bottomright", legend = xx,
+  lty = 1, pch = 18, lwd = 2, pt.cex = 1, cex = 0.6, col = xcols,
+  title = "Model", title.font = 2
+)
+dev.off() # close graphic device
+
 
 # Save image --------------------------------------------------------------
 
