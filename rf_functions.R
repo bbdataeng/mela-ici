@@ -176,6 +176,22 @@ get_accuracy_metrics <- function(rf_object, confusion_matrix, positive_level = "
       nonadjacent_error_rate = nonadjacent_error_rate,
       QWK = qwk
     )
+  } else {
+    stop("Unvalid class of 'rf_object'")
   }
   return(metrics)
+}
+
+
+
+# Variable importance -----------------------------------------------------
+get_importance <- function(rf_object) {
+  if (class(rf_object) == "ranger") { ## binary random forest ##
+    vimp <- rf_object$variable.importance |> sort(decreasing = TRUE)
+  } else if (class(rf_object) == "ordfor") { ## ordinal random forest ##
+    vimp <- rf_object$varimp |> sort(decreasing = TRUE)
+  } else {
+    stop("Unvalid class of 'rf_object'")
+  }
+  return(vimp)
 }

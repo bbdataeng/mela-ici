@@ -303,6 +303,99 @@ for (i in seq_len(nrow(to_do))) {
 }
 
 
+# Get variable importance -------------------------------------------------
+importances <- lapply( # list of variable importances
+  X = seq_len(nrow(to_do)),
+  FUN = function(i) get_importance(rf_object = get(to_do$rf[i]))
+)
+names(importances) <- to_do$rf
+
+# create dataframe of variable importance scores
+vars <- names(alldata) |> grepv(pattern = "response|accession", invert = TRUE)
+for (i in seq_along(importances)) {
+  importances[[i]] <- importances[[i]][vars]
+  names(importances[[i]]) <- vars
+}
+importances_df <- do.call(rbind, importances)
+
+# get ranked variable importance scores
+importances_rank <- lapply(
+  X = importances, FUN = function(x) {
+    xrank <- rank(x, na.last = TRUE)
+    xrank[is.na(x)] <- NA
+    xrank <- max(xrank, na.rm = TRUE) + 1 - xrank
+    return(xrank)
+  }
+)
+
+# save data and barplot of importance scores
+for (i in seq_len(nrow(to_do))) {
+  # prepare ordered dataframe
+  xx <- data.frame(
+    variable = names(importances[[i]]),
+    rank = rank(importances[[i]], na.last = TRUE),
+    importance = importances[[i]]
+  )
+  xx$rank[is.na(xx$importance)] <- NA
+  xx$rank <- max(xx$rank, na.rm = TRUE) + 1 - xx$rank
+  xx <- xx[order(xx$rank, na.last = TRUE), ]
+  rownames(xx) <- NULL
+  # save dataframe
+  write.table(xx, file.path(to_do$folder[i], "variable_importance.txt"),
+    row.names = FALSE, sep = "\t"
+  )
+  # make barplot of all importance scores
+  png(file.path(to_do$folder[i], "variable_importance_barplot.png"),
+    width = 8 * resol, height = 8 * resol, res = resol
+  )
+  par(mar = c(5.1, 12.5, 0.5, 0.5), las = 2)
+  xx <- barplot(importances_df[i, ], horiz = TRUE, plot = FALSE)
+  xlim <- range(importances_df[i, ], na.rm = TRUE)
+  xlim <- xlim + c(-diff(xlim) * 0.1, diff(xlim) * 0.1)
+  varnames <- ifelse(names(importances_df[i, ]) %in% names(cell_types_original),
+    cell_types_original[names(importances_df[i, ])],
+    names(importances_df[i, ])
+  )
+  plot(NULL,
+    xlim = xlim, ylim = range(xx), axes = FALSE,
+    xlab = "Variable Importance", ylab = ""
+  )
+  barplot(importances_df[i, ],
+    horiz = TRUE, add = TRUE, names.arg = varnames
+  )
+  text(
+    x = as.numeric(importances_df[i, ]), y = xx, labels = importances_rank[[i]],
+    pos = ifelse(importances_df[i, ] >= 0 | is.na(importances_df[i, ]), 4, 2)
+  )
+  dev.off()
+  # make barplot of top 10 importance scores
+  png(file.path(to_do$folder[i], "variable_importance_barplot_top10.png"),
+    width = 6 * resol, height = 4 * resol, res = resol
+  )
+  par(mar = c(5.1, 12.5, 0.5, 0.5), las = 2)
+  top10 <- importances_df[i, ] |>
+    sort(decreasing = TRUE) |>
+    head(10)
+  xx <- barplot(top10, horiz = TRUE, plot = FALSE)
+  xlim <- c(0, max(top10) * 1.1)
+  varnames <- ifelse(names(top10) %in% names(cell_types_original),
+    cell_types_original[names(top10)],
+    names(top10)
+  )
+  plot(NULL,
+    xlim = xlim, ylim = rev(range(xx)) + c(0.5, 0), axes = FALSE,
+    xlab = "Variable Importance", ylab = ""
+  )
+  barplot(top10,
+    horiz = TRUE, add = TRUE,
+    names.arg = varnames
+  )
+  text(x = as.numeric(top10), y = xx, labels = 1:10, pos = 4)
+  dev.off()
+}
+rm(xlim, xx, top10, varnames, i)
+
+
 # Save image --------------------------------------------------------------
 
 save.image("nonsync/06_random_forests.RData")
