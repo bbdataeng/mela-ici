@@ -34,15 +34,20 @@ alldata <- cbind(metadata, hed_data, xdata)
 resol <- 300
 transparency_colors <- 0.8
 
-# prepare colors for response
-colors_response <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response)) |>
+# prepare colors for response (6 levels)
+colors_response6 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response_6levels)) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_response) <- levels(metadata$response)
+names(colors_response6) <- levels(metadata$response_6levels)
 
-# prepare colors for response_group
-colors_response_group <- paletteer_d("ggsci::default_jama", nlevels(metadata$response_group)) |>
+# prepare colors for response (3 levels)
+colors_response3 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response_3levels)) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_response_group) <- levels(metadata$response_group)
+names(colors_response3) <- levels(metadata$response_3levels)
+
+# prepare colors for response (2 levels)
+colors_response2 <- paletteer_d("ggsci::default_jama", nlevels(metadata$response_2levels)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_response2) <- levels(metadata$response_2levels)
 
 # prepare colors for sex
 colors_gender <- paletteer_d("RColorBrewer::Dark2", nlevels(metadata$gender)) |>
@@ -100,11 +105,12 @@ for (combination in combinations) {
     PCs_to_plot = combination, # PCs to plot on X and Y axis respectively
     metadata = metadata, # dataframe of metadata (rows matching PCA data)
     vars_to_use = c( # which variables (columns of metadata) should be used?
-      "response", "response_group", "treatment", "gender", "enrichment_protocol", "dataset"
+      "response_6levels", "response_3levels", "response_2levels", "treatment", "gender", "enrichment_protocol", "dataset"
     ),
     colors_vars_list = list( # list of colors for the variables
-      response = colors_response,
-      response_group = colors_response_group,
+      response_6levels = colors_response6,
+      response_3levels = colors_response3,
+      response_2levels = colors_response2,
       treatment = colors_treatment,
       gender = colors_gender,
       enrichment_protocol = colors_enrichment_protocol,
@@ -122,7 +128,6 @@ for (combination in combinations) {
     width_in = 6, height_in = 4 # width and height of the plot in inches
   )
 }
-# TODO: biplots
 
 # scree plot
 percentVar <- round(pca$sdev^2 / sum(pca$sdev^2) * 100, 1)
@@ -133,6 +138,73 @@ png(file.path(pca_folder, "scree_plot.png"),
 par(mar = c(3.5, 3, 0.5, 0.1), mgp = c(2, 0.8, 0), tcl = -0.3)
 barplot(percentVar, las = 2, ylab = "% of total variance explained")
 dev.off()
+
+
+# PCA loadings ------------------------------------------------------------
+
+set_dark_theme <- function() {
+  par(
+    bg = "black", # background of plot area
+    fg = "white", # foreground: axis ticks, box
+    col = "white", # default plotting color
+    col.axis = "white", # axis tick labels
+    col.lab = "white", # axis titles
+    col.main = "white", # main title
+    col.sub = "white" # subtitle (if used)
+  )
+}
+arrows_pca_loadings <- function(
+    PCx = "PC1", PCy = "PC2",
+    text.cex = 0.5, col.text = "black", loadings_data, ...) {
+  rot_x <- loadings_data[, PCx]
+  rot_y <- loadings_data[, PCy]
+  arrows(
+    x0 = rep(0, length(rot_x)), y0 = rep(0, length(rot_y)),
+    x1 = rot_x, y1 = rot_y, ...
+  )
+  angles <- atan2(rot_y, rot_x)
+  angles <- ifelse(angles < 0, angles + 2 * pi, angles)
+  position_text <- ifelse(
+    angles >= pi / 4 & angles <= pi * (3 / 4), 3, ifelse(
+      angles >= pi * (3 / 4) & angles <= pi * (5 / 4), 2, ifelse(
+        angles >= pi * (5 / 4) & angles <= pi * (7 / 4), 1, 4
+      )
+    )
+  )
+  text(
+    x = rot_x, y = rot_y, labels = rownames(loadings_data),
+    pos = position_text, cex = text.cex, col = col.text
+  )
+}
+
+plot_rotation <- function(PCx = "PC1", PCy = "PC2", loadings_data) {
+  #set_dark_theme()
+  par(las = 1, mar = rep(3, 4), mgp = c(2, 0.7, 0), tcl = -0.3, xpd = TRUE)
+  plot(NULL,
+    xlim = c(-1, 1), ylim = c(-1, 1),
+    xlab = PCx, ylab = PCy,
+    xaxs = "i", yaxs = "i", asp = 1, bty = "l",
+    main = paste0("Rotation ", PCy, " ~ ", PCx),
+  )
+  colors_celltypes <- paletteer_d("ggsci::default_igv", nrow(loadings_data))
+  arrows_pca_loadings(
+    PCx = PCx, PCy = PCy, loadings_data = loadings_data,
+    text.cex = 0.7, col.text = colors_celltypes, lwd = 1, length = 0.03, col = colors_celltypes
+  )
+}
+
+for (combination in combinations) {
+  png(
+    file.path(output_folder, paste0(
+      "PCA_rotation_", combination[1], "_", combination[2], ".png"
+    )),
+    width = 5 * resol, height = 5 * resol, res = resol
+  )
+  plot_rotation(
+    PCx = combination[1], PCy = combination[2], loadings_data = pca$rotation
+  )
+  dev.off()
+}
 
 
 # Correlation between all numeric variables -------------------------------
