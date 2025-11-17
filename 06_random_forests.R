@@ -3,10 +3,10 @@
 # Load libraries ----------------------------------------------------------
 library(ranger) # v0.17.0
 library(ordinalForest) # v2.4-4
+library(ComplexHeatmap) # v2.24.1
+library(grid)
+library(paletteer)
 source("rf_functions.R")
-# library(ggplot2)
-# library(irr) # v0.84.1
-# library(pROC) # v1.19.0.1
 
 
 # Prepare new directories -------------------------------------------------
@@ -395,6 +395,85 @@ for (i in seq_len(nrow(to_do))) {
 }
 rm(xlim, xx, top10, varnames, i)
 
+
+# Compare variable importance across models -------------------------------
+
+# data frame of variable importance ranks
+vip_rank <- apply(importances_df, MARGIN = 1, FUN = function(x) {
+  xx <- rank(x, na.last = TRUE)
+  xx[is.na(x)] <- NA
+  xx <- max(xx, na.rm = TRUE) + 1 - xx
+  return(xx)
+})
+vip_rank <- vip_rank[order(rownames(vip_rank)), ] # order alphabetically
+rownames(vip_rank) <- ifelse(
+  rownames(vip_rank) %in% names(cell_types_original),
+  cell_types_original[rownames(vip_rank)],
+  rownames(vip_rank)
+)
+
+# prepare annotation dataframe
+ann_df <- data.frame(
+  to_do[, c("response_type", "technical_predictors", "age_and_gender")],
+  row.names = colnames(vip_rank)
+)
+ann_df$response_levels <- ifelse(
+  ann_df$response_type == "binary", 2, ifelse(
+    ann_df$response_type == "ordinal3", 3, 6
+  )
+)
+ann_df$rf_class <- ifelse(ann_df$response_levels == 2, "ranger", "ordfor")
+ann_df <- ann_df[, c("rf_class", "response_levels", "technical_predictors", "age_and_gender")]
+
+# prepare annotation colors
+palettes <- c(
+  "ggsci::default_nejm", "ggthemes::Green",
+  "ggsci::default_jama", "ggsci::default_jama"
+)
+names(palettes) <- names(ann_df)
+ann_colors <- lapply(names(ann_df), FUN = function(x) {
+  xvar <- ann_df[, x]
+  if (is.logical(xvar) | is.character(xvar)) xvar <- factor(xvar)
+  if (is.factor(xvar)) {
+    cols <- paletteer_d(palettes[x], nlevels(xvar))
+    names(cols) <- levels(xvar)
+  } else {
+    cols <- paletteer_c(palettes[x], length(unique(xvar)))
+    names(cols) <- sort(unique(xvar))
+  }
+  return(cols)
+})
+names(ann_colors) <- names(ann_df)
+
+# create heatmap
+png(file.path(output_folder, "heatmap_variable_importance.png"),
+  width = 8 * resol, height = 6 * resol, res = resol
+)
+Heatmap(
+  vip_rank,
+  name = "Ranked Variable Importance\n(1 = most important)",
+  col = paletteer_c("viridis::viridis", 150, -1),
+  show_column_names = FALSE,
+  top_annotation = HeatmapAnnotation(
+    show_legend = TRUE,
+    df = ann_df,
+    col = ann_colors,
+    annotation_name_gp = gpar(fontface = "bold")
+  ),
+  cluster_rows = TRUE,
+  cluster_columns = FALSE,
+  row_title = "Variables",
+  column_title = "Random Forest models",
+  heatmap_legend_param = list(
+    legend_direction = "horizontal",
+    legend_width = unit(4, "cm") # adjust to taste
+  )
+) |> draw(
+  merge_legend = TRUE, # all legends in one column
+  heatmap_legend_side = "right", # keep everything on the right
+  annotation_legend_side = "right"
+)
+dev.off()
 
 # Save image --------------------------------------------------------------
 
