@@ -475,6 +475,247 @@ Heatmap(
 )
 dev.off()
 
+
+# Compare accuracy metrics for binary RFs ---------------------------------
+
+# see metrics of ranger (binary) random forests
+names(accuracy_metrics[[1]])
+
+# put together metrics of binary random forests
+accuracy_ranger_wide <- cbind(
+  to_do[
+    to_do$response_type == "binary",
+    c("rf", "technical_predictors", "age_and_gender")
+  ],
+  sapply(
+    X = which(to_do$response_type == "binary"),
+    FUN = function(x) accuracy_metrics[[x]]
+  ) |>
+    t() |> as.data.frame()
+)
+
+# reshape into long format
+accuracy_ranger_long <- reshape(
+  data = accuracy_ranger_wide,
+  varying = c(
+    "accuracy", "sensitivity", "specificity", "precision",
+    "f1_score", "balanced_accuracy", "mcc"
+  ),
+  v.names = "metric",
+  idvar = "rf",
+  times = c(
+    "accuracy", "sensitivity", "specificity", "precision",
+    "f1_score", "balanced_accuracy", "mcc"
+  ),
+  timevar = "metric_type",
+  direction = "long"
+)
+accuracy_ranger_long$metric_type <- factor( # metric type as factor
+  accuracy_ranger_long$metric_type,
+  levels = c(
+    "accuracy", "sensitivity", "specificity", "precision",
+    "f1_score", "balanced_accuracy", "mcc"
+  )
+)
+levels(accuracy_ranger_long$metric_type) <- c(
+  "Accuracy", "Sensitivity", "Specificity", "Precision",
+  "F1 score", "Balanced\nAccuracy", "MCC"
+)
+accuracy_ranger_long$rf <- as.factor(accuracy_ranger_long$rf)
+
+# define colors of binary rf models
+ranger_rf_colors <- paletteer_d("RColorBrewer::Paired", 2 * nlevels(accuracy_ranger_long$rf))
+ranger_rf_colors <- ranger_rf_colors[!as.logical(seq_along(ranger_rf_colors) %% 2)]
+names(ranger_rf_colors) <- levels(accuracy_ranger_long$rf)
+
+# prepare coordinates for barplot
+xx <- barplot(
+  metric ~ rf + metric_type,
+  data = accuracy_ranger_long,
+  beside = TRUE, plot = FALSE
+)
+rownames(xx) <- levels(accuracy_ranger_long$rf)
+colnames(xx) <- levels(accuracy_ranger_long$metric_type)
+# create barplot
+png(file.path(output_folder, "barplot_metrics_binary.png"),
+  width = 10 * resol, height = 4 * resol, res = resol
+)
+par(las = 1, xpd = TRUE, tcl = -0.3, mar = c(6, 3.5, 0.5, 0.2), mgp = c(2.5, 0.8, 0))
+ylabs <- seq(from = 0, to = 1, by = 0.25)
+plot(NULL,
+  xlim = range(xx), xaxt = "n",
+  ylim = c(-0.1, 1), yaxs = "i", yaxt = "n",
+  xlab = "", ylab = "Value", bty = "n"
+)
+axis(side = 2, at = ylabs)
+segments(
+  x0 = par("usr")[1], x1 = par("usr")[2],
+  y0 = 0, y1 = 0, lty = 1, col = "black", lwd = 1
+)
+barplot(
+  metric ~ rf + metric_type,
+  data = accuracy_ranger_long,
+  add = TRUE, axes = FALSE, axisnames = FALSE,
+  beside = TRUE, col = ranger_rf_colors
+)
+for (x in seq_len(nrow(xx))) {
+  for (y in seq_len(ncol(xx))) {
+    yvalue <- accuracy_ranger_long$metric[
+      as.numeric(accuracy_ranger_long$rf) == x &
+        as.numeric(accuracy_ranger_long$metric_type) == y
+    ]
+    text(
+      x = xx[x, y], y = yvalue, cex = 0.7, srt = 0,
+      labels = round(yvalue, 2), pos = ifelse(yvalue >= 0, 3, 1)
+    )
+  }
+}
+text(
+  x = apply(xx, 2, mean), y = -0.2, adj = c(0.5, 0.5),
+  labels = levels(accuracy_ranger_long$metric_type)
+)
+legend(
+  bty = "n", horiz = TRUE, fill = ranger_rf_colors,
+  x = mean(par("usr")[1:2]),
+  y = grconvertY(0, from = "ndc", to = "user"),
+  xjust = 0.5, yjust = 0, cex = 0.8,
+  legend = c(
+    "wo technical predictors,\nage and gender",
+    "wo technical predictors",
+    "wo age and gender",
+    "all predictors"
+  ), title = "Binary RF model (class ranger)", title.font = 2
+)
+dev.off()
+# remove objects no longer needed
+rm(x, y, yvalue, xx, ylabs)
+
+
+# Compare accuracy metrics for ordinal RFs --------------------------------
+
+# see metrics of ordfor (ordinal) random forests
+names(accuracy_metrics[[2]])
+
+# put together monodimensional metrics
+monodim_metrics_ordfor <- c( # names of 1d accuracy metrics
+  "overall_accuracy", "macro_F1", "weighted_F1", "MAE",
+  "adjacent_error_rate", "nonadjacent_error_rate", "QWK"
+)
+accuracy_ordfor_1d_wide <- lapply(
+  X = accuracy_metrics[to_do$response_type != "binary"],
+  FUN = function(x) x[monodim_metrics_ordfor]
+) |>
+  unlist() |> # unlist
+  matrix( # create matrix
+    ncol = length(monodim_metrics_ordfor), byrow = TRUE, dimnames = list(
+      to_do$rf[to_do$response_type != "binary"], # row names: ordinal rf models
+      monodim_metrics_ordfor # column names: 1d accuracy metrics
+    )
+  )
+accuracy_ordfor_1d_wide <- cbind( # bind with data from to_do
+  to_do[
+    to_do$response_type != "binary",
+    c("rf", "technical_predictors", "age_and_gender")
+  ],
+  accuracy_ordfor_1d_wide
+)
+
+# reshape into long format
+accuracy_ordfor_long <- reshape(
+  data = accuracy_ordfor_1d_wide,
+  varying = monodim_metrics_ordfor,
+  v.names = "metric",
+  idvar = "rf",
+  times = monodim_metrics_ordfor,
+  timevar = "metric_type",
+  direction = "long"
+)
+accuracy_ordfor_long$metric_type <- factor( # metric type as factor
+  accuracy_ordfor_long$metric_type,
+  levels = monodim_metrics_ordfor
+)
+levels(accuracy_ordfor_long$metric_type) <- c(
+  "Overall\nAccuracy", "Macro F1", "Weighted F1", "MAE",
+  "Adjacent\nError Rate", "Non-Adjacent\nError Rate", "QWK"
+)
+accuracy_ordfor_long$rf <- factor(accuracy_ordfor_long$rf, levels = c(
+  "rf_ord3_0_0", "rf_ord6_0_0",
+  "rf_ord3_0_1", "rf_ord6_0_1",
+  "rf_ord3_1_0", "rf_ord6_1_0",
+  "rf_ord3_1_1", "rf_ord6_1_1"
+))
+
+# define colors of binary rf models
+ordfor_rf_colors <- paletteer_d("RColorBrewer::Paired", nlevels(accuracy_ordfor_long$rf))
+names(ordfor_rf_colors) <- levels(accuracy_ordfor_long$rf)
+
+# prepare coordinates for barplot
+xx <- barplot(
+  metric ~ rf + metric_type,
+  data = accuracy_ordfor_long,
+  beside = TRUE, plot = FALSE
+)
+rownames(xx) <- levels(accuracy_ordfor_long$rf)
+colnames(xx) <- levels(accuracy_ordfor_long$metric_type)
+# create barplot
+png(file.path(output_folder, "barplot_metrics_ordinal.png"),
+  width = 10 * resol, height = 4 * resol, res = resol
+)
+par(las = 1, xpd = TRUE, tcl = -0.3, mar = c(6, 3.5, 0.5, 0.2), mgp = c(2.5, 0.8, 0))
+ylabs <- seq(from = 0, to = max(accuracy_ordfor_long$metric), by = 0.25)
+plot(NULL,
+  xlim = range(xx), xaxt = "n",
+  ylim = range(accuracy_ordfor_long$metric), yaxt = "n",
+  xlab = "", ylab = "Value", bty = "n"
+)
+axis(side = 2, at = ylabs)
+segments(
+  x0 = par("usr")[1], x1 = par("usr")[2],
+  y0 = 0, y1 = 0, lty = 1, col = "black", lwd = 1
+)
+barplot(
+  metric ~ rf + metric_type,
+  data = accuracy_ordfor_long,
+  add = TRUE, axes = FALSE, axisnames = FALSE,
+  beside = TRUE, col = ordfor_rf_colors
+)
+for (x in seq_len(nrow(xx))) {
+  for (y in seq_len(ncol(xx))) {
+    yvalue <- accuracy_ordfor_long$metric[
+      as.numeric(accuracy_ordfor_long$rf) == x &
+        as.numeric(accuracy_ordfor_long$metric_type) == y
+    ]
+    text(
+      x = xx[x, y], y = yvalue, cex = 0.5, srt = 0,
+      labels = round(yvalue, 2), pos = ifelse(yvalue >= 0, 3, 1)
+    )
+  }
+}
+text(
+  x = apply(xx, 2, mean), y = -0.4, adj = c(0.5, 0.5),
+  labels = levels(accuracy_ordfor_long$metric_type)
+)
+legend(
+  bty = "n", fill = ordfor_rf_colors,
+  x = mean(par("usr")[1:2]),
+  y = grconvertY(0, from = "ndc", to = "user"),
+  xjust = 0.5, yjust = 0, cex = 0.8, ncol = 4,
+  legend = c(
+    "3 levels - wo technical, age and gender",
+    "6 levels - wo technical, age and gender",
+    "3 levels - wo technical",
+    "6 levels - wo technical",
+    "3 levels - wo age and gender",
+    "6 levels - wo age and gender",
+    "3 levels - all predictors",
+    "6 levels - all predictors"
+  ), title = "Ordinal RF model (class ranger)", title.font = 2
+)
+dev.off()
+# remove objects no longer needed
+rm(x, y, yvalue, xx, ylabs)
+
+
 # Save image --------------------------------------------------------------
 
 save.image("nonsync/06_random_forests.RData")
