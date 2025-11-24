@@ -3,6 +3,7 @@ plot_glmer_fitted_PCA <- function(
     model_formula, # formula used to fit the model
     results_table, # results_table, output of get_results_table()
     data, # data used to fit the model
+    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
     bootstrap_object, # bootstrap object returned by boot.glmm.pred()
     pca_results, # PCA results returned by prcomp()
     link = "logit", # link function
@@ -52,7 +53,6 @@ plot_glmer_fitted_PCA <- function(
     resol = fitted_resolution, level = 0.95, offset2add = NULL, keep.boots = FALSE
   )
 
-
   # get maximum absolute rotation (for scaling the plot axis)
   xx <- grepv("^PC", fe_predictors) # PCs included in the model formula
   max_rotation <- max(abs(pca_results[["rotation"]][, xx])) * 1.1
@@ -74,7 +74,7 @@ plot_glmer_fitted_PCA <- function(
   # outcome counts
   tab <- table(data[, response_term])
   n_tot <- sum(tab)
-  lvl_names <- names(tab)
+  lvl_names <- response_levels
   # build lines
   lines_txt <- c(
     sprintf("\u03B2 = %.3f  [%.3f, %.3f]", beta, lcl, ucl),
@@ -91,6 +91,28 @@ plot_glmer_fitted_PCA <- function(
 
   # set seed
   set.seed(123)
+
+  # check response and jitter it
+  if (is.factor(data[, response_term])) {
+    if (nlevels(data[, response_term]) != 2) {
+      stop(
+        "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+      )
+    }
+    resp_jittered <- jitter(as.numeric(data[, response_term]) - 1, amount = 0.06)
+  } else if (is.numeric(data[, response_term])) {
+    if (any(!data[, response_term] %in% c(0, 1))) {
+      stop(
+        "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+      )
+    }
+    # check that
+    resp_jittered <- jitter(data[, response_term], amount = 0.06)
+  } else {
+    stop(
+      "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+    )
+  }
 
   # open appropriate graphic device
   if (!is.null(file_path)) {
@@ -134,16 +156,16 @@ plot_glmer_fitted_PCA <- function(
   # plot
   plot(
     x = data[, PC_to_plot],
-    y = jitter(as.numeric(data[, response_term]) - 1, amount = 0.06),
+    y = resp_jittered,
     ylim = c(-0.2, 1.2), yaxs = "i",
     xlab = "", ylab = "Response",
     yaxt = "n", pch = 21,
     bg = grey(0.2, 0.25), col = adjustcolor("black", 0.4), cex = 1
   )
   mtext(1, text = PC_to_plot, line = 2)
-  axis(2, at = 0:1, labels = levels(data[, response_term]))
+  axis(2, at = 0:1, labels = response_levels)
   axis(4, at = pretty(0:1))
-  mtext(4, text = "p(R)", las = 0, line = par("mgp")[1])
+  mtext(4, text = paste0("p(", response_levels[2], ")"), las = 0, line = par("mgp")[1])
 
   # CIs of the fitted values
   polygon(
@@ -152,8 +174,6 @@ plot_glmer_fitted_PCA <- function(
     border = NA, col = adjustcolor("#023E8A", 0.2)
   )
   lines(x = fit[, PC_to_plot], y = fit$fit, lwd = 2, col = "#023E8A")
-
-
 
   # bottom plot: PCA loadings
   par(mar = c(2.5, 2, 0.5, 1), mgp = c(1.5, 0.6, 0))
@@ -177,11 +197,10 @@ plot_glmer_fitted_PCA <- function(
     cex = (abs(rot) / max(abs(rot))) * 0.7 + 0.3,
     xpd = NA
   )
-  legend("bottomright",
-    bty = "n", inset = 0.01, lwd = 2,
-    col = c("#2A9D8F", "#E76F51"), legend = c("+", "−")
-  )
-
+  # legend("bottomright",
+  #   bty = "n", inset = 0.01, lwd = 2,
+  #   col = c("#2A9D8F", "#E76F51"), legend = c("+", "−")
+  # )
 
   # add statistics
   par(mar = c(2.5, 0.5, 0.5, 0.5), mgp = c(1.5, 0.6, 0), xpd = TRUE)
@@ -205,6 +224,7 @@ plot_glmer_fitted_continuous <- function(
     model_formula, # formula used to fit the model
     results_table, # results_table, output of get_results_table()
     data, # data used to fit the model
+    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
     bootstrap_object, # bootstrap object returned by boot.glmm.pred()
     link = "logit", # link function
     covariate_to_plot, # which covariate should be plotted
@@ -264,7 +284,7 @@ plot_glmer_fitted_continuous <- function(
   # outcome counts
   tab <- table(data[, response_term])
   n_tot <- sum(tab)
-  lvl_names <- names(tab)
+  lvl_names <- response_levels
   # build lines
   lines_txt <- c(
     sprintf("\u03B2 = %.3f  [%.3f, %.3f]", beta, lcl, ucl),
@@ -281,6 +301,28 @@ plot_glmer_fitted_continuous <- function(
 
   # set seed
   set.seed(123)
+
+  # check response and jitter it
+  if (is.factor(data[, response_term])) {
+    if (nlevels(data[, response_term]) != 2) {
+      stop(
+        "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+      )
+    }
+    resp_jittered <- jitter(as.numeric(data[, response_term]) - 1, amount = 0.06)
+  } else if (is.numeric(data[, response_term])) {
+    if (any(!data[, response_term] %in% c(0, 1))) {
+      stop(
+        "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+      )
+    }
+    # check that
+    resp_jittered <- jitter(data[, response_term], amount = 0.06)
+  } else {
+    stop(
+      "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+    )
+  }
 
   # open appropriate graphic device
   if (!is.null(file_path)) {
@@ -320,15 +362,15 @@ plot_glmer_fitted_continuous <- function(
   # plot
   plot(
     x = data[, covariate_to_plot],
-    y = jitter(as.numeric(data[, response_term]) - 1, amount = 0.06),
+    y = resp_jittered,
     ylim = c(-0.2, 1.2), yaxs = "i",
     xlab = covariate_to_plot, ylab = "Response",
     yaxt = "n", pch = 21,
     bg = grey(0.2, 0.25), col = adjustcolor("black", 0.4), cex = 1
   )
-  axis(2, at = 0:1, labels = levels(data[, response_term]))
+  axis(2, at = 0:1, labels = response_levels)
   axis(4, at = pretty(0:1))
-  mtext(4, text = "p(R)", las = 0, line = par("mgp")[1])
+  mtext(4, text = paste0("p(", response_levels[2], ")"), las = 0, line = par("mgp")[1])
 
   # CIs of the fitted values
   polygon(
@@ -357,6 +399,7 @@ plot_glmer_fitted_categorical <- function(
     model_formula, # formula used to fit the model
     results_table, # results_table, output of get_results_table()
     data, # data used to fit the model
+    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
     bootstrap_object, # bootstrap object returned by boot.glmm.pred()
     link = "logit", # link function
     variable_to_plot, # which variable should be plotted
@@ -415,7 +458,7 @@ plot_glmer_fitted_categorical <- function(
   # outcome counts
   tab <- table(data[, response_term])
   n_tot <- sum(tab)
-  lvl_names <- names(tab)
+  lvl_names <- response_levels
   # build lines
   lines_txt <- c(
     sprintf("\u03B2 = %.3f  [%.3f, %.3f]", beta, lcl, ucl),
@@ -432,6 +475,28 @@ plot_glmer_fitted_categorical <- function(
 
   # set seed
   set.seed(123)
+
+  # check response and jitter it
+  if (is.factor(data[, response_term])) {
+    if (nlevels(data[, response_term]) != 2) {
+      stop(
+        "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+      )
+    }
+    resp_jittered <- jitter(as.numeric(data[, response_term]) - 1, amount = 0.06)
+  } else if (is.numeric(data[, response_term])) {
+    if (any(!data[, response_term] %in% c(0, 1))) {
+      stop(
+        "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+      )
+    }
+    # check that
+    resp_jittered <- jitter(data[, response_term], amount = 0.06)
+  } else {
+    stop(
+      "The response variable must be a factor with 2 levels or a numeric variable of 0s and 1s."
+    )
+  }
 
   # open appropriate graphic device
   if (!is.null(file_path)) {
@@ -478,16 +543,18 @@ plot_glmer_fitted_categorical <- function(
 
   points(
     x = jitter(as.numeric(data[, variable_to_plot]), amount = 0.1),
-    y = jitter(as.numeric(data[, response_term]) - 1, amount = 0.06),
+    y = resp_jittered,
     pch = 21, bg = grey(0.2, 0.25), col = adjustcolor("black", 0.4), cex = 1
   )
-  axis(2, at = 0:1, labels = levels(data[, response_term]))
+  axis(2, at = 0:1, labels = response_levels)
   axis(4, at = pretty(0:1))
-  mtext(4, text = "p(R)", las = 0, line = par("mgp")[1])
+  mtext(4, text = paste0("p(", response_levels[2], ")"), las = 0, line = par("mgp")[1])
   axis(1,
     at = seq_along(levels(data[, variable_to_plot])),
     labels = levels(data[, variable_to_plot])
   )
+
+
 
 
   # fitted values and confidence intervals
