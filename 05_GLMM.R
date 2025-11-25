@@ -380,6 +380,7 @@ for (i in seq_len(nrow(to_do))) {
 
 # Plots showing HED data --------------------------------------------------
 
+# plot separately
 for (i in seq_len(nrow(to_do))) {
   for (var_to_plot in c("z.HED_locusA", "z.HED_locusB", "z.HED_locusC")) {
     plot_glmer_fitted_continuous(
@@ -397,6 +398,24 @@ for (i in seq_len(nrow(to_do))) {
       width_in = 7, height_in = 4 # width and height of the plot in inches
     )
   }
+}
+
+# plot together
+for (i in seq_len(nrow(to_do))) {
+  plot_glmer_fitted_multiple_continuous(
+    model = get(to_do$model[i]), # binomial model fitted with lme4::glmer()
+    model_formula = as.formula(to_do$formula[i]), # formula used to fit the model
+    results_table = get(to_do$restab[i]), # results_table, output of get_results_table()
+    data = get(to_do$df_object[i]), # data used to fit the model
+    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
+    bootstrap_object = get(to_do$bootstrap[i]), # bootstrap object returned by boot.glmm.pred()
+    link = "logit", # link function
+    covariates_to_plot = c("z.HED_locusA", "z.HED_locusB", "z.HED_locusC"), # which covariate should be plotted
+    fitted_resolution = 100, # resolution of calculated fitted values
+    file_path = file.path(to_do$folder[i], paste0("fitted_z.HED_lociABC.png")), # path to save the plot
+    res_ppi = 300, # resolution (pixels per inch)
+    width_in = 10, height_in = 4 # width and height of the plot in inches
+  )
 }
 
 
