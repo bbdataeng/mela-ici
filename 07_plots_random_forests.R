@@ -9,7 +9,20 @@ library(grid)
 library(paletteer)
 
 # Plot settings -----------------------------------------------------------
+
 resol <- 300 # resolution in ppi
+
+# prepare colors for response (6 levels)
+colors_response6 <- paletteer_c("grDevices::RdYlBu", nlevels(alldata$response_6levels))
+names(colors_response6) <- levels(alldata$response_6levels)
+
+# prepare colors for response (3 levels)
+colors_response3 <- paletteer_c("grDevices::RdYlBu", nlevels(alldata$response_3levels))
+names(colors_response3) <- levels(alldata$response_3levels)
+
+# prepare colors for response (2 levels)
+colors_response2 <- paletteer_c("grDevices::RdYlBu", nlevels(alldata$response_2levels))
+names(colors_response2) <- levels(alldata$response_2levels)
 
 # Make barplots of importance scores --------------------------------------
 
@@ -259,7 +272,7 @@ dev.off()
 rm(x, y, yvalue, xx, ylabs)
 
 
-# Compare accuracy metrics for ordinal RFs --------------------------------
+# Compare 1d accuracy metrics for ordinal RFs -----------------------------
 
 # see metrics of ordfor (ordinal) random forests
 names(accuracy_metrics[[2]])
@@ -383,6 +396,111 @@ dev.off()
 # remove objects no longer needed
 rm(x, y, yvalue, xx, ylabs)
 
-# Save image --------------------------------------------------------------
 
+# Compare 2d+ accuracy metrics for ordinal RFs ----------------------------
+
+# see metrics of ordfor (ordinal) random forests
+names(accuracy_metrics[[2]])
+
+# put together monodimensional metrics
+multidim_metrics_ordfor <- c( # names of multidimensional accuracy metrics
+  "sensitivity_per_class", "precision_per_class", "f1_per_class"
+)
+accuracy_ordfor_multi_wide <- lapply(
+  X = accuracy_metrics[to_do$response_type != "binary"],
+  FUN = function(x) x[multidim_metrics_ordfor]
+) |>
+  do.call(what = rbind)
+accuracy_ordfor_multi_wide <- cbind( # bind with data from to_do
+  to_do[
+    to_do$response_type != "binary",
+    c("rf", "technical_predictors", "age_and_gender")
+  ],
+  formula = as.factor(paste0("RF", rep(c(3, 1, 4, 2), each = 2))),
+  accuracy_ordfor_multi_wide
+)
+accuracy_ordfor_multi_wide
+accuracy_ordfor_multi_wide <- accuracy_ordfor_multi_wide[
+  order(accuracy_ordfor_multi_wide$formula),
+]
+
+plotmat <- matrix(1:8, ncol = 4)
+plotmat <- rbind(9:12, plotmat)
+plotmat <- cbind(plotmat, c(0, 13:14))
+
+png(file.path(output_folder, "metrics_ordinalRFs_barplot.png"),
+  height = 6 * resol, width = 10 * resol, res = resol
+)
+layout(plotmat, heights = c(1, 6, 6))
+par(
+  las = 2, mar = c(4, 3.5, 0.5, 0.5),
+  mgp = c(2.5, 0.8, 0), tcl = -0.3, xpd = TRUE
+)
+for (i in seq_len(nrow(accuracy_ordfor_multi_wide))) {
+  xxtype <- length(accuracy_ordfor_multi_wide[[i, 5]])
+  xx <- accuracy_ordfor_multi_wide[i, ][5:7] |>
+    unlist() |>
+    matrix(nrow = xxtype)
+  xx[is.nan(xx) | is.na(xx)] <- 0
+  dimnames(xx) <- list(
+    names(accuracy_ordfor_multi_wide[[i, 5]]),
+    gsub("_per_class", "", names(accuracy_ordfor_multi_wide)[5:7])
+  )
+  xxcoords <- barplot(xx,
+    las = 2,
+    beside = T, ylim = 0:1, space = c(0, 2), plot = FALSE
+  )
+  plot(NULL,
+    xlim = range(xxcoords) + c(-1, 1), ylim = 0:1,
+    ylab = "Value", xlab = "", xaxt = "n", bty = "n", yaxs = "i"
+  )
+  rect(
+    xleft = par("usr")[1], xright = par("usr")[2],
+    ybottom = par("usr")[3], ytop = par("usr")[4], col = "gray90", border = NA
+  )
+  barplot(xx,
+    add = T,
+    beside = T, ylim = c(-0.05, 1.05), las = 2,
+    col = if (xxtype == 3) {
+      colors_response3
+    } else {
+      colors_response6
+    },
+    ylab = "Value", names.arg = rep("", ncol(xx)),
+    space = c(0, 2)
+  )
+  text(
+    x = apply(xxcoords, 2, mean), y = -0.05, srt = 45, labels = colnames(xx),
+    adj = 1
+  )
+}
+# add column titles (RF formulas)
+par(mar = c(0.5, 3.5, 0.5, 0.5), mgp = rep(0, 3))
+for (xx in levels(accuracy_ordfor_multi_wide$formula)) {
+  plot(NULL, xlim = c(-1, 1), ylim = c(-1, 1), axes = FALSE, ann = FALSE)
+  text(
+    x = 0, y = 0,
+    labels = xx, font = 2, cex = 1.5
+  )
+}
+
+# add color legend
+par(mar = rep(0.5, 4), mgp = rep(0, 3))
+plot(NULL, xlim = c(-1, 1), ylim = c(-1, 1), axes = FALSE, ann = FALSE)
+legend(
+  x = 0, y = 0, xjust = 0.5, yjust = 0.5,
+  legend = names(colors_response3), fill = colors_response3,
+  bty = "n", cex = 1.3, title = "Response\n(ordinal, 3 levels)", title.font = 2
+)
+plot(NULL, xlim = c(-1, 1), ylim = c(-1, 1), axes = FALSE, ann = FALSE)
+legend(
+  x = 0, y = 0, xjust = 0.5, yjust = 0.5,
+  legend = names(colors_response6), fill = colors_response6,
+  bty = "n", cex = 1.3, title = "Response\n(ordinal, 6 levels)", title.font = 2
+)
+dev.off()
+
+
+
+# Save image --------------------------------------------------------------
 save.image("nonsync/07_plots_random_forests.RData")
