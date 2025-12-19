@@ -7,6 +7,8 @@ load("nonsync/06_random_forests.RData") # load random forests data
 library(ComplexHeatmap) # v2.24.1
 library(grid)
 library(paletteer)
+library(cvms)
+library(ggplot2)
 
 # Plot settings -----------------------------------------------------------
 
@@ -501,6 +503,28 @@ legend(
 dev.off()
 
 
+# Plot confusion matrices -------------------------------------------------
+for (i in seq_len(nrow(to_do))) {
+  xx = confusion_matrices[[i]] |> as.data.frame()
+  xx <- subset(xx, Observed != "Sum" & Predicted != "Sum") |> droplevels()
+  xx <- xx[seq_len(nrow(xx)) |> rep(times = xx$Freq), ]
+  xcm <- confusion_matrix(targets = xx$Observed, predictions = xx$Predicted)
+  plot_confusion_matrix(xcm,
+                        add_sums = TRUE, add_normalized = FALSE,
+                        class_order = rev(levels(xx$Observed)),
+                        add_zero_shading = F, palette = "Blues",
+                        intensity_by = "counts", rm_zero_text = FALSE,
+                        rm_zero_percentages = FALSE,
+                        sums_settings = sum_tile_settings(
+                          palette = "Oranges",
+                          tc_tile_border_color = "black"
+                        )
+  ) |> ggsave(
+    filename = file.path(to_do$folder[i], "confusion_matrix.png"),
+    width = 4, height = 4, units = "in", dpi = 300
+  )
+}
+rm(xx, xcm, i)
 
 # Save image --------------------------------------------------------------
 save.image("nonsync/07_plots_random_forests.RData")
