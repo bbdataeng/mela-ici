@@ -1,21 +1,21 @@
 # Function to make stacked barplots ---------------------------------------
 
 make_stacked_barplot <- function(
-    x_var, # x-axis variable
-    x_var_name = "", # name of the x-axis variable
-    col_var, # color-axis variable
-    col_var_name = "", # name of the color-axis variable
-    type = c("frequency", "proportion"),
-    color_palette, # vector of colors matching levels of col_var
-    rotate_x_var_labels = FALSE, # whether x_axis labels should be rotated (useful for long names)
-    show_x_var_frequencies = FALSE, # don't show x-var frequencies
-    show_percentages = TRUE, # whether to show percentages in the bars
-    min_percentage = 2, # hide percentages below this threshold
-    file_path = NULL, # file path (with format) to save the plot
-    res_ppi = 300, # resolution of the plot
-    width_in = 6, height_in = 6, # width and height of the plot (in inches)
-    ... # additional arguments passed to par()
-    ) {
+  x_var, # x-axis variable
+  x_var_name = "", # name of the x-axis variable
+  col_var, # color-axis variable
+  col_var_name = "", # name of the color-axis variable
+  type = c("frequency", "proportion"),
+  color_palette, # vector of colors matching levels of col_var
+  rotate_x_var_labels = FALSE, # whether x_axis labels should be rotated (useful for long names)
+  show_x_var_frequencies = FALSE, # don't show x-var frequencies
+  show_percentages = TRUE, # whether to show percentages in the bars
+  min_percentage = 2, # hide percentages below this threshold
+  file_path = NULL, # file path (with format) to save the plot
+  res_ppi = 300, # resolution of the plot
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
+  ... # additional arguments passed to par()
+) {
   # TODO:
   # if statements to check valid arguments
 
@@ -155,24 +155,23 @@ make_stacked_barplot <- function(
 }
 
 
-
 # Function to make dot plots ----------------------------------------------
 
 make_dotplot <- function(
-    x_var, # x-axis variable
-    x_var_name = "", # name of the x-axis variable
-    y_var, # y-axis variable
-    y_var_name = "", # name of the y-axis variable
-    expansion_factor = 5, # regulate dot size
-    pt.pch = 16, # type of point
-    pt.col = grey(0.5, 0.5), # color of the points
-    show_legend = TRUE, # if FALSE, hide legend
-    rotate_x_var_labels = FALSE, # whether x_axis labels should be rotated (useful for long names)
-    file_path = NULL, # file path (with format) to save the plot
-    res_ppi = 300, # resolution of the plot
-    width_in = 6, height_in = 6, # width and height of the plot (in inches)
-    ... # additional arguments passed to par()
-    ) {
+  x_var, # x-axis variable
+  x_var_name = "", # name of the x-axis variable
+  y_var, # y-axis variable
+  y_var_name = "", # name of the y-axis variable
+  expansion_factor = 5, # regulate dot size
+  pt.pch = 16, # type of point
+  pt.col = grey(0.5, 0.5), # color of the points
+  show_legend = TRUE, # if FALSE, hide legend
+  rotate_x_var_labels = FALSE, # whether x_axis labels should be rotated (useful for long names)
+  file_path = NULL, # file path (with format) to save the plot
+  res_ppi = 300, # resolution of the plot
+  width_in = 6, height_in = 6, # width and height of the plot (in inches)
+  ... # additional arguments passed to par()
+) {
   # TODO:
   # if statements to check valid arguments
 

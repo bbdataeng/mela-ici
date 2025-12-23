@@ -1,21 +1,21 @@
 ##### function to plot PCA data, with colors coding a factor #####
 plot_pca_factor <- function(
-    pca_res, # output of prcomp()
-    PCs_to_plot = c("PC1", "PC2"), # PCs to plot on X and Y axis respectively
-    metadata, # dataframe of metadata (rows matching PCA data)
-    vars_to_use, # which variables (columns of metadata) should be used?
-    colors_vars_list, # list of colors for the variables
-    par_mar = c(2.5, 2.5, 2.5, 5), # graphical parameters par("mar")
-    dark_theme = FALSE, # set to false to have white theme
-    pt.cex = 1, # point size
-    equal_axis_scale = FALSE, # set to TRUE to force same scaling of the X and Y axes
-    legend_cex = 1, # relative dimension of the legend
-    legend_ncols = 1, # columns to split the legend in
-    output_folder, # folder to save the plots
-    file_format = "png", # file format
-    res_ppi = 300, # resolution (pixels per inch)
-    width_in = 8, height_in = 8 # width and height of the plot in inches
-    ) {
+  pca_res, # output of prcomp()
+  PCs_to_plot = c("PC1", "PC2"), # PCs to plot on X and Y axis respectively
+  metadata, # dataframe of metadata (rows matching PCA data)
+  vars_to_use, # which variables (columns of metadata) should be used?
+  colors_vars_list, # list of colors for the variables
+  par_mar = c(2.5, 2.5, 2.5, 5), # graphical parameters par("mar")
+  dark_theme = FALSE, # set to false to have white theme
+  pt.cex = 1, # point size
+  equal_axis_scale = FALSE, # set to TRUE to force same scaling of the X and Y axes
+  legend_cex = 1, # relative dimension of the legend
+  legend_ncols = 1, # columns to split the legend in
+  output_folder, # folder to save the plots
+  file_format = "png", # file format
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 8, height_in = 8 # width and height of the plot in inches
+) {
   ##### quality check #####
 
   # check that metadata is a dataframe

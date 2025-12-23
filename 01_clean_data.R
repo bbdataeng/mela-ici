@@ -182,7 +182,6 @@ xdata <- xdata[order(xdata$dataset), ] # then by dataset
 # write_xlsx(xdata, file.path(output_folder, "reconstructed_patients.xlsx"))
 
 
-
 # Inspect data ------------------------------------------------------------
 
 # data structure

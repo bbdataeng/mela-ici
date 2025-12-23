@@ -154,8 +154,9 @@ set_dark_theme <- function() {
   )
 }
 arrows_pca_loadings <- function(
-    PCx = "PC1", PCy = "PC2",
-    text.cex = 0.5, col.text = "black", loadings_data, ...) {
+  PCx = "PC1", PCy = "PC2",
+  text.cex = 0.5, col.text = "black", loadings_data, ...
+) {
   rot_x <- loadings_data[, PCx]
   rot_y <- loadings_data[, PCy]
   arrows(
@@ -178,7 +179,7 @@ arrows_pca_loadings <- function(
 }
 
 plot_rotation <- function(PCx = "PC1", PCy = "PC2", loadings_data) {
-  #set_dark_theme()
+  # set_dark_theme()
   par(las = 1, mar = rep(3, 4), mgp = c(2, 0.7, 0), tcl = -0.3, xpd = TRUE)
   plot(NULL,
     xlim = c(-1, 1), ylim = c(-1, 1),

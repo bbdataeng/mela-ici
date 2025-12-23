@@ -34,6 +34,7 @@ thr_padj <- 0.05
 n_genes_to_label <- 50
 genes_to_label <- head(rownames(volcanodata), n_genes_to_label)
 # create volcano plot
+set.seed(123)
 my_volcano_wLabels(
   x = volcanodata, # data
   main = paste0( # title
@@ -49,7 +50,7 @@ my_volcano_wLabels(
   col_up_genes = rgb(1, 0, 0, alpha = 0.5), # color for upregulated genes
   col_down_genes = rgb(0, 0, 1, alpha = 0.5), # color for downregulated genes
   col_other_genes = rgb(0.5, 0.5, 0.5, alpha = 0.2), # color for other genes
-  file_path = file.path(plots_folder, "volcano.png"), # file path
+  file_path = file.path(plots_folder, "volcano_NR_vs_R.png"), # file path
   xlim_range = c( # range of x-axis
     -max(abs(volcanodata$log2FoldChange)), max(abs(volcanodata$log2FoldChange))
   ),
@@ -130,8 +131,9 @@ colors_vars_list <- list( # list of colors for the variables
 
 # function for drawing arrows corresponding to PCA loadings
 arrows_pca_loadings <- function(
-    PCx = "PC1", PCy = "PC2",
-    text.cex = 0.5, col.text = "black", loadings_data, ...) {
+  PCx = "PC1", PCy = "PC2",
+  text.cex = 0.5, col.text = "black", loadings_data, ...
+) {
   rot_x <- loadings_data[, PCx]
   rot_y <- loadings_data[, PCy]
   arrows(
@@ -283,9 +285,6 @@ arrows_pca_loadings(
   text.cex = 1, col.text = colors_celltypes, lwd = 2,
   length = 0.05, col = colors_celltypes
 )
-
-
-
 
 
 # close graphic device

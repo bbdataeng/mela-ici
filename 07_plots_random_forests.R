@@ -388,10 +388,7 @@ text(
 )
 legend(
   bty = "n", fill = ordfor_rf_colors,
-  x = "topright",
-  #y = grconvertY(0, from = "ndc", to = "user"),
-  #xjust = 0.5, yjust = 0,
-  cex = 0.8, ncol = 4,
+  x = "topright", cex = 0.8, ncol = 4,
   legend = names(ordfor_rf_colors), title = "Ordinal RF model (class ranger)",
   title.font = 2
 )

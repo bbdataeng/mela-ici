@@ -1,20 +1,20 @@
 plot_glmer_fitted_PCA <- function(
-    model, # binomial model fitted with lme4::glmer()
-    model_formula, # formula used to fit the model
-    results_table, # results_table, output of get_results_table()
-    data, # data used to fit the model
-    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
-    bootstrap_object, # bootstrap object returned by boot.glmm.pred()
-    pca_results, # PCA results returned by prcomp()
-    link = "logit", # link function
-    fitted_resolution = 100, # resolution of calculated fitted values
-    PC_to_plot = "PC1", # which PC should be plotted
-    n_top_feautures = NULL, # optionally, an integer determining the number of top features to plot
-    file_path = NULL, # optional: path to save the plot
-    res_ppi = 300, # resolution (pixels per inch)
-    relative_heights = c(2, 1), # relative heights of the two plot sections
-    width_in = 8, height_in = 8 # width and height of the plot in inches
-    ) {
+  model, # binomial model fitted with lme4::glmer()
+  model_formula, # formula used to fit the model
+  results_table, # results_table, output of get_results_table()
+  data, # data used to fit the model
+  response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
+  bootstrap_object, # bootstrap object returned by boot.glmm.pred()
+  pca_results, # PCA results returned by prcomp()
+  link = "logit", # link function
+  fitted_resolution = 100, # resolution of calculated fitted values
+  PC_to_plot = "PC1", # which PC should be plotted
+  n_top_feautures = NULL, # optionally, an integer determining the number of top features to plot
+  file_path = NULL, # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  relative_heights = c(2, 1), # relative heights of the two plot sections
+  width_in = 8, height_in = 8 # width and height of the plot in inches
+) {
   # check that the directory exists
   if (!is.null(file_path)) {
     if (!dir.exists(dirname(file_path))) {
@@ -220,19 +220,19 @@ plot_glmer_fitted_PCA <- function(
 }
 
 plot_glmer_fitted_continuous <- function(
-    model, # binomial model fitted with lme4::glmer()
-    model_formula, # formula used to fit the model
-    results_table, # results_table, output of get_results_table()
-    data, # data used to fit the model
-    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
-    bootstrap_object, # bootstrap object returned by boot.glmm.pred()
-    link = "logit", # link function
-    covariate_to_plot, # which covariate should be plotted
-    fitted_resolution = 100, # resolution of calculated fitted values
-    file_path = NULL, # optional: path to save the plot
-    res_ppi = 300, # resolution (pixels per inch)
-    width_in = 8, height_in = 5 # width and height of the plot in inches
-    ) {
+  model, # binomial model fitted with lme4::glmer()
+  model_formula, # formula used to fit the model
+  results_table, # results_table, output of get_results_table()
+  data, # data used to fit the model
+  response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
+  bootstrap_object, # bootstrap object returned by boot.glmm.pred()
+  link = "logit", # link function
+  covariate_to_plot, # which covariate should be plotted
+  fitted_resolution = 100, # resolution of calculated fitted values
+  file_path = NULL, # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 8, height_in = 5 # width and height of the plot in inches
+) {
   # check that the directory exists
   if (!is.null(file_path)) {
     if (!dir.exists(dirname(file_path))) {
@@ -395,19 +395,19 @@ plot_glmer_fitted_continuous <- function(
 }
 
 plot_glmer_fitted_multiple_continuous <- function(
-    model, # binomial model fitted with lme4::glmer()
-    model_formula, # formula used to fit the model
-    results_table, # results_table, output of get_results_table()
-    data, # data used to fit the model
-    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
-    bootstrap_object, # bootstrap object returned by boot.glmm.pred()
-    link = "logit", # link function
-    covariates_to_plot, # which covariates should be plotted
-    fitted_resolution = 100, # resolution of calculated fitted values
-    file_path = NULL, # optional: path to save the plot
-    res_ppi = 300, # resolution (pixels per inch)
-    width_in = 8, height_in = 5 # width and height of the plot in inches
-    ) {
+  model, # binomial model fitted with lme4::glmer()
+  model_formula, # formula used to fit the model
+  results_table, # results_table, output of get_results_table()
+  data, # data used to fit the model
+  response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
+  bootstrap_object, # bootstrap object returned by boot.glmm.pred()
+  link = "logit", # link function
+  covariates_to_plot, # which covariates should be plotted
+  fitted_resolution = 100, # resolution of calculated fitted values
+  file_path = NULL, # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 8, height_in = 5 # width and height of the plot in inches
+) {
   # check that the directory exists
   if (!is.null(file_path)) {
     if (!dir.exists(dirname(file_path))) {
@@ -587,18 +587,18 @@ plot_glmer_fitted_multiple_continuous <- function(
 }
 
 plot_glmer_fitted_categorical <- function(
-    model, # binomial model fitted with lme4::glmer()
-    model_formula, # formula used to fit the model
-    results_table, # results_table, output of get_results_table()
-    data, # data used to fit the model
-    response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
-    bootstrap_object, # bootstrap object returned by boot.glmm.pred()
-    link = "logit", # link function
-    variable_to_plot, # which variable should be plotted
-    file_path = NULL, # optional: path to save the plot
-    res_ppi = 300, # resolution (pixels per inch)
-    width_in = 8, height_in = 5 # width and height of the plot in inches
-    ) {
+  model, # binomial model fitted with lme4::glmer()
+  model_formula, # formula used to fit the model
+  results_table, # results_table, output of get_results_table()
+  data, # data used to fit the model
+  response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
+  bootstrap_object, # bootstrap object returned by boot.glmm.pred()
+  link = "logit", # link function
+  variable_to_plot, # which variable should be plotted
+  file_path = NULL, # optional: path to save the plot
+  res_ppi = 300, # resolution (pixels per inch)
+  width_in = 8, height_in = 5 # width and height of the plot in inches
+) {
   # check that the directory exists
   if (!is.null(file_path)) {
     if (!dir.exists(dirname(file_path))) {
@@ -745,8 +745,6 @@ plot_glmer_fitted_categorical <- function(
     at = seq_along(levels(data[, variable_to_plot])),
     labels = levels(data[, variable_to_plot])
   )
-
-
 
 
   # fitted values and confidence intervals
