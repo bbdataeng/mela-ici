@@ -16,8 +16,15 @@ if (!dir.exists(output_folder)) dir.create(output_folder)
 # define combinations of rf models to be created
 to_do <- expand.grid(
   response_type = c("binary", "ordinal3", "ordinal6"),
-  technical_predictors = c(TRUE, FALSE),
-  age_and_gender = c(TRUE, FALSE)
+  age_and_gender = c(TRUE, FALSE),
+  technical_predictors = c(FALSE, TRUE)
+)
+# define rf formulae names
+to_do$rf_formula <- paste0("RF", 1:4) |> rep(each = 3)
+to_do$rf_formula <- paste(
+  to_do$rf_formula,
+  c("bin", "ord3", "ord6"),
+  sep = "_"
 )
 
 # create new folders
@@ -25,15 +32,9 @@ to_do$folder <- character(nrow(to_do))
 for (i in seq_len(nrow(to_do))) {
   to_do$folder[i] <- file.path(
     output_folder, # main output folder
-    paste0(to_do$response_type[i], "_response"), # binary or ordinal response
-    ifelse(to_do$technical_predictors[i], # including or technical predictors or not
-      "with_technical_preds", "wo_technical_preds"
-    ),
-    ifelse(to_do$age_and_gender[i], # including age and gender or not
-      "with_age_gender", "wo_age_gender"
-    )
+    to_do$rf_formula[i]
   )
-  if (!dir.exists(to_do$folder[i])) dir.create(to_do$folder[i], recursive = TRUE)
+  if (!dir.exists(to_do$folder[i])) dir.create(to_do$folder[i])
 }
 
 
@@ -85,9 +86,7 @@ alldata$response_2levels <- factor( # response_2levels non-ordered
 
 # define new dataframe for each row of to_do
 to_do$df_all <- paste(
-  "df", "all", gsub("inal", "", to_do$response_type),
-  as.numeric(to_do$technical_predictors),
-  as.numeric(to_do$age_and_gender),
+  "df", "all", to_do$rf_formula,
   sep = "_"
 )
 for (i in seq_len(nrow(to_do))) {
@@ -122,8 +121,7 @@ for (i in seq_len(nrow(to_do))) {
   assign(x = to_do$df_all[i], value = xx)
 }
 rm(xx, vars_to_include)
-ls(pattern = "^df") # new dataframes created
-
+ls(pattern = "^df_all") # new dataframes created
 
 
 # Split dataset in train and test subsets ---------------------------------
@@ -157,29 +155,32 @@ ls(pattern = "^df") # new dataframes created
 # save data in each folder
 for (i in seq_len(nrow(to_do))) {
   write.csv(x = get(to_do$df_train[i]), file = file.path(
-    to_do$folder[i], "data_train.csv"
+    to_do$folder[i], paste0("data_train_", to_do$rf_formula[i], ".csv")
   ), row.names = FALSE)
   write.csv(x = get(to_do$df_test[i]), file = file.path(
-    to_do$folder[i], "data_test.csv"
+    to_do$folder[i], paste0("data_test_", to_do$rf_formula[i], ".csv")
   ), row.names = FALSE)
 }
 
-# define formulas
+# define formulae
 for (i in seq_len(nrow(to_do))) {
   predictors <- get(to_do$df_all[i]) |>
     names() |>
     setdiff(y = c("accession", "response")) |>
     paste(collapse = " + ")
-  to_do$formula[i] <- paste0("response ~ ", predictors)
+  to_do$full_formula[i] <- paste0("response ~ ", predictors)
 }
 
 # save formula and number of observations in test/train data in each folder
 for (i in seq_len(nrow(to_do))) {
   n_train <- nrow(get(to_do$df_train[i]))
   n_test <- nrow(get(to_do$df_test[i]))
-  sink(file.path(to_do$folder[i], "formula_sampleSizes.txt"))
+  sink(file.path(to_do$folder[i], paste0(
+    "formula_sampleSizes_", to_do$rf_formula[i], ".txt"
+  )))
+  cat(paste0("===== ", to_do$rf_formula[i], " =====\n"), sep = "\n")
   cat("===== Formula =====", sep = "\n")
-  cat(to_do$formula[i], "\n")
+  cat(to_do$full_formula[i], "\n")
   cat("\n===== Excluded data (NAs present) =====", sep = "\n")
   cat(paste0(nrow(alldata) - n_train - n_test, " observations"), sep = "\n")
   cat("\n===== Training data =====", sep = "\n")
@@ -208,12 +209,12 @@ to_do$rf <- gsub("df_all", "rf", to_do$df_all)
 # get random forests on binary response
 for (i in which(to_do$response_type == "binary")) {
   # get number of predictors
-  n_predictors <- strsplit(to_do$formula[i], split = " \\+ ") |>
+  n_predictors <- strsplit(to_do$full_formula[i], split = " \\+ ") |>
     unlist() |>
     length()
   # random forest
   ranger(
-    formula = as.formula(to_do$formula[i]), # rf formula
+    formula = as.formula(to_do$full_formula[i]), # rf formula
     data = get(to_do$df_train[i]), # training data
     importance = "permutation",
     probability = TRUE,
@@ -225,12 +226,12 @@ for (i in which(to_do$response_type == "binary")) {
     seed = 1 # set seed for reproducibility
   ) |> assign(x = to_do$rf[i]) # assign new object
 }
-ls(pattern = "^rf_bin") # new random forests objects
+ls(pattern = "^rf") # new random forests objects
 
 # get random forests on ordinal response
 for (i in which(to_do$response_type != "binary")) {
   # get predictors
-  predictors <- to_do$formula[i] |>
+  predictors <- to_do$full_formula[i] |>
     gsub(pattern = "response ~ ", replacement = "") |>
     strsplit(split = " \\+ ") |>
     unlist()
@@ -250,13 +251,13 @@ for (i in which(to_do$response_type != "binary")) {
     num.threads = 0 # 0 = auto
   ) |> assign(x = to_do$rf[i]) # assign new object
 }
-ls(pattern = "^rf_ord") # new random forests objects
+ls(pattern = "^rf") # new random forests objects
 
 # save rf objects
 for (i in seq_len(nrow(to_do))) {
   saveRDS(
     object = get(to_do$rf[i]),
-    file = file.path(to_do$folder[i], "rf.rds")
+    file = file.path(to_do$folder[i], paste0("rfObject_", to_do$rf_formula[i], ".rds"))
   )
 }
 
@@ -272,7 +273,7 @@ confusion_matrices <- lapply( # list of confusion matrices
     )
   }
 )
-names(confusion_matrices) <- to_do$rf
+names(confusion_matrices) <- to_do$rf_formula
 
 # Get accuracy metrics ----------------------------------------------------
 accuracy_metrics <- lapply( # list of accuracy metrics
@@ -285,11 +286,13 @@ accuracy_metrics <- lapply( # list of accuracy metrics
     )
   }
 )
-names(accuracy_metrics) <- to_do$rf
+names(accuracy_metrics) <- to_do$rf_formula
 
 # save confusion matrices and accuracy metrics in the respective folders
 for (i in seq_len(nrow(to_do))) {
-  sink(file.path(to_do$folder[i], "confusionMatrix_accuracyMetrics.txt"))
+  sink(file.path(to_do$folder[i], paste0(
+    "CM_accuracyMetrics_", to_do$rf_formula[i], ".txt"
+  )))
   cat("===== Confusion Matrix =====", sep = "\n")
   print(confusion_matrices[[i]])
   cat("\n===== Accuracy Metrics =====", sep = "\n")
@@ -303,7 +306,7 @@ importances <- lapply( # list of variable importances
   X = seq_len(nrow(to_do)),
   FUN = function(i) get_importance(rf_object = get(to_do$rf[i]))
 )
-names(importances) <- to_do$rf
+names(importances) <- to_do$rf_formula
 
 # create dataframe of variable importance scores
 vars <- names(alldata) |> grepv(pattern = "response|accession", invert = TRUE)
@@ -336,8 +339,10 @@ for (i in seq_len(nrow(to_do))) {
   xx <- xx[order(xx$rank, na.last = TRUE), ]
   rownames(xx) <- NULL
   # save dataframe
-  write.table(xx, file.path(to_do$folder[i], "variable_importance.txt"),
-    row.names = FALSE, sep = "\t"
+  write.table(xx, file.path(to_do$folder[i], paste0(
+    "variable_importance_", to_do$rf_formula[i], ".txt"
+  )),
+  row.names = FALSE, sep = "\t"
   )
 }
 rm(xx, i)
