@@ -358,6 +358,9 @@ for (i in seq_len(nrow(to_do))) {
     xx_path <- file.path(
       to_do$folder[i], paste0("fitted_", var_to_plot, ".png")
     )
+    xx_n_features <- sum(abs( # number of features with loading >= 0.3
+      pca_cibersortx$rotation[, var_to_plot]
+    ) >= 0.3)
     plot_glmer_fitted_PCA(
       model = get(to_do$model[i]), # binomial model fitted with lme4::glmer()
       model_formula = as.formula(to_do$formula[i]), # formula used to fit the model
@@ -369,7 +372,7 @@ for (i in seq_len(nrow(to_do))) {
       link = "logit", # link function
       fitted_resolution = 100, # resolution of calculated fitted values
       PC_to_plot = var_to_plot, # which PC should be plotted
-      n_top_feautures = 10, # optionally, an integer determining the number of top features to plot
+      n_top_feautures = xx_n_features, # number of top features to plot
       file_path = xx_path, # optional: path to save the plot
       res_ppi = 300, # resolution (pixels per inch)
       relative_heights = c(2, 1), # relative heights of the two plot sections
