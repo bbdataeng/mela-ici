@@ -31,8 +31,13 @@ volcanodata <- volcanodata[order(volcanodata$padj), ]
 thr_lfc <- 1
 thr_padj <- 0.05
 # genes to label
-n_genes_to_label <- 50
-genes_to_label <- head(rownames(volcanodata), n_genes_to_label)
+sig_genes <- subset(volcanodata, abs(log2FoldChange) > thr_lfc & padj < thr_padj) |> rownames()
+n_top_genes_to_label <- 30
+genes_to_label <- c( #
+  head(sig_genes, n_top_genes_to_label), # top n genes by pvalue
+  "C4B", "CRP", "MBL2", "KLRC1", "ITIH4" # other custom genes
+) |> unique()
+stopifnot(all(genes_to_label %in% sig_genes))
 # create volcano plot
 set.seed(123)
 my_volcano_wLabels(
@@ -40,8 +45,8 @@ my_volcano_wLabels(
   main = paste0( # title
     "Volcano plot of NR vs R\n",
     "with ABS(Log2FC) > ", thr_lfc,
-    " and adjusted P-value < ", thr_padj,
-    "\nTop ", n_genes_to_label, " genes by lowest adjusted P-value are labeled"
+    " and adjusted P-value < ", thr_padj # ,
+    # "\nTop ", n_genes_to_label, " genes by lowest adjusted P-value are labeled"
   ),
   cutoff_log2FC = thr_lfc, # cutoff for fold change
   cutoff_padj = thr_padj, # cutoff for p value
@@ -56,8 +61,6 @@ my_volcano_wLabels(
   ),
   report_cutoffs = FALSE # cutoffs manually added in the title already
 )
-
-
 
 
 # Load data ---------------------------------------------------------------
@@ -127,7 +130,7 @@ colors_vars_list <- list( # list of colors for the variables
 )
 
 
-# PCA plots ---------------------------------------------------------------
+# PCA plots for PC1 vs. PC2 -----------------------------------------------
 
 # function for drawing arrows corresponding to PCA loadings
 arrows_pca_loadings <- function(
@@ -174,7 +177,7 @@ colors_celltypes <- paletteer_d("ggsci::default_igv", nrow(rotdata))
 
 # open graphic device
 png(
-  filename = file.path(plots_folder, "PCA.png"),
+  filename = file.path(plots_folder, "PCA_PC1PC2.png"),
   width = resol * 15, height = resol * 4, res = resol
 )
 
@@ -275,12 +278,146 @@ plot(NULL,
   xlim = c(-0.3, 0.7), ylim = c(-0.5, 0.5),
   xlab = "Loading on PC1", ylab = "Loading on PC2",
   xaxs = "i", yaxs = "i", asp = 1, bty = "l", # axes = FALSE,
-  main = paste0("Rotation"),
+  main = paste0("PCA Loading"),
 )
 abline(h = 0, col = "gray40", lty = "dotted")
 abline(v = 0, col = "gray40", lty = "dotted")
 par(xpd = TRUE)
 arrows_pca_loadings(
+  loadings_data = rotdata,
+  text.cex = 1, col.text = colors_celltypes, lwd = 2,
+  length = 0.05, col = colors_celltypes
+)
+
+
+# close graphic device
+dev.off()
+
+# PCA plots for PC1 vs. PC3 -----------------------------------------------
+
+# define symmetric axis range
+xrange <- c(
+  -max(abs(pca_res$x[, c("PC1", "PC3")])),
+  max(abs(pca_res$x[, c("PC1", "PC3")]))
+)
+
+# prepare rotation data
+rotdata <- pca_res$rotation[, c("PC1", "PC3")] |> as.data.frame()
+rotdata$length <- sqrt(rotdata$PC1^2 + rotdata$PC3^2)
+rotdata <- rotdata[order(rotdata$length, decreasing = FALSE), ]
+rotdata <- tail(rotdata, 10) |> as.matrix()
+colors_celltypes <- paletteer_d("ggsci::default_igv", nrow(rotdata))
+
+# open graphic device
+png(
+  filename = file.path(plots_folder, "PCA_PC1PC3.png"),
+  width = resol * 8, height = resol * 8, res = resol
+)
+
+# set graphical parameters
+par(
+  mfrow = c(2, 2),
+  mar = c(2.5, 2.5, 2.5, 0.2), mgp = c(1.5, 0.4, 0),
+  tcl = -0.2, las = 1, xpd = FALSE
+)
+
+# plot response
+plot(NULL,
+  xlim = xrange, ylim = xrange, asp = 1,
+  bty = "l", ylab = paste0(
+    "PC3", ": ", percent_var["PC3"],
+    "% of total variation"
+  ),
+  xlab = paste0(
+    "PC1", ": ", percent_var["PC1"],
+    "% of total variation"
+  ),
+  main = "PCA by response"
+)
+abline(h = 0, col = "gray40", lty = "dotted")
+abline(v = 0, col = "gray40", lty = "dotted")
+points(
+  x = pca_res$x[, "PC1"], y = pca_res$x[, "PC3"],
+  pch = 21, cex = 1.5,
+  bg = colors_vars_list[["response_2levels"]][as.numeric(
+    metadata[, "response_2levels"]
+  )]
+)
+legend(
+  x = "bottomleft", legend = levels(metadata[, "response_2levels"]),
+  pt.bg = colors_vars_list[["response_2levels"]], pch = 21, pt.cex = 1.5,
+  border = NA, cex = 0.8, ncol = 2, xpd = TRUE
+)
+
+# plot enrichment protocol
+plot(NULL,
+  xlim = xrange, ylim = xrange, asp = 1,
+  bty = "l", ylab = paste0(
+    "PC3", ": ", percent_var["PC3"],
+    "% of total variation"
+  ),
+  xlab = paste0(
+    "PC1", ": ", percent_var["PC1"],
+    "% of total variation"
+  ),
+  main = "PCA by enrichment protocol"
+)
+abline(h = 0, col = "gray40", lty = "dotted")
+abline(v = 0, col = "gray40", lty = "dotted")
+points(
+  x = pca_res$x[, "PC1"], y = pca_res$x[, "PC3"],
+  pch = 21, cex = 1.5,
+  bg = colors_vars_list[["enrichment_protocol"]][as.numeric(
+    metadata[, "enrichment_protocol"]
+  )]
+)
+legend(
+  x = "bottomleft", legend = names(colors_vars_list[["enrichment_protocol"]]),
+  pt.bg = colors_vars_list[["enrichment_protocol"]], pch = 21, pt.cex = 1.5,
+  border = NA, cex = 0.8, ncol = 1, xpd = TRUE
+)
+
+# plot dataset
+plot(NULL,
+  xlim = xrange, ylim = xrange, asp = 1,
+  bty = "l", ylab = paste0(
+    "PC3", ": ", percent_var["PC3"],
+    "% of total variation"
+  ),
+  xlab = paste0(
+    "PC1", ": ", percent_var["PC1"],
+    "% of total variation"
+  ),
+  main = "PCA by dataset"
+)
+abline(h = 0, col = "gray40", lty = "dotted")
+abline(v = 0, col = "gray40", lty = "dotted")
+points(
+  x = pca_res$x[, "PC1"], y = pca_res$x[, "PC3"],
+  pch = 21, cex = 1.5,
+  bg = colors_vars_list[["dataset"]][as.numeric(
+    metadata[, "dataset"]
+  )]
+)
+legend(
+  x = "bottomleft", legend = levels(metadata[, "dataset"]),
+  pt.bg = colors_vars_list[["dataset"]], pch = 21, pt.cex = 1.5,
+  border = NA, cex = 0.8, ncol = 1, xpd = TRUE
+)
+
+# plot rotation
+par(las = 1)
+plot(NULL,
+  xlim = c(-0.4, 0.8), ylim = c(-0.5, 0.5),
+  xlab = "Loading on PC1", ylab = "Loading on PC3",
+  xaxs = "i", yaxs = "i", asp = 1, bty = "l", # axes = FALSE,
+  main = paste0("PCA Loading"),
+)
+abline(h = 0, col = "gray40", lty = "dotted")
+abline(v = 0, col = "gray40", lty = "dotted")
+par(xpd = TRUE)
+arrows_pca_loadings(
+  PCx = "PC1", PCy = "PC3",
   loadings_data = rotdata,
   text.cex = 1, col.text = colors_celltypes, lwd = 2,
   length = 0.05, col = colors_celltypes
