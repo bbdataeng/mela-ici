@@ -39,7 +39,7 @@ get_confusion_matrix <- function(rf_object, testdata, show_sum = TRUE) {
 
 
 # Accuracy metrics --------------------------------------------------------
-get_accuracy_metrics <- function(rf_object, confusion_matrix, positive_level = "R") {
+get_accuracy_metrics <- function(rf_object, testdata, confusion_matrix, positive_level = "R") {
   # remove the "Sum" row and column, if present
   confusion_matrix <- confusion_matrix[
     rownames(confusion_matrix) != "Sum",
@@ -47,6 +47,19 @@ get_accuracy_metrics <- function(rf_object, confusion_matrix, positive_level = "
     drop = FALSE
   ]
   if (class(rf_object) == "ranger") { ## binary random forest ##
+    ### calculate AUC ##
+    pred <- predict( # predicted probabilities
+      rf_object,
+      data = testdata, type = "response", probability = TRUE
+    )
+    prob_pos <- pred$predictions[, positive_level] # probability of positive level
+    # get AUC
+    xauc <- roc(
+      response = testdata$response, predictor = prob_pos, quiet = TRUE
+    ) |>
+      auc() |>
+      as.numeric()
+    ### calculate prediction performance metrics from Confusion Matrix
     # extract cells
     negative_level <- colnames(confusion_matrix) |> setdiff(positive_level)
     stopifnot(length(negative_level) == 1) # make sure that it is a 2x2 design
@@ -76,6 +89,7 @@ get_accuracy_metrics <- function(rf_object, confusion_matrix, positive_level = "
     }
     # put everything in a named vector
     metrics <- c(
+      AUC = xauc,
       accuracy = accuracy,
       sensitivity = sensitivity,
       specificity = specificity,
@@ -181,7 +195,6 @@ get_accuracy_metrics <- function(rf_object, confusion_matrix, positive_level = "
   }
   return(metrics)
 }
-
 
 
 # Variable importance -----------------------------------------------------

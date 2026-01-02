@@ -3,6 +3,7 @@
 # Load libraries ----------------------------------------------------------
 library(ranger) # v0.17.0
 library(ordinalForest) # v2.4-4
+library(pROC) # v1.19.0.1
 library(grid)
 source("rf_functions.R")
 
@@ -292,6 +293,7 @@ accuracy_metrics <- lapply( # list of accuracy metrics
   FUN = function(i) {
     get_accuracy_metrics(
       rf_object = get(to_do$rf[i]),
+      testdata = get(to_do$df_test[i]),
       confusion_matrix = confusion_matrices[[i]],
       positive_level = "R"
     )

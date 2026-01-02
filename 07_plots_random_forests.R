@@ -211,13 +211,13 @@ accuracy_ranger_wide <- cbind(
 accuracy_ranger_long <- reshape(
   data = accuracy_ranger_wide,
   varying = c(
-    "accuracy", "sensitivity", "specificity", "precision",
+    "AUC", "accuracy", "sensitivity", "specificity", "precision",
     "f1_score", "balanced_accuracy", "mcc"
   ),
   v.names = "metric",
   idvar = "rf_short",
   times = c(
-    "accuracy", "sensitivity", "specificity", "precision",
+    "AUC", "accuracy", "sensitivity", "specificity", "precision",
     "f1_score", "balanced_accuracy", "mcc"
   ),
   timevar = "metric_type",
@@ -226,12 +226,12 @@ accuracy_ranger_long <- reshape(
 accuracy_ranger_long$metric_type <- factor( # metric type as factor
   accuracy_ranger_long$metric_type,
   levels = c(
-    "accuracy", "sensitivity", "specificity", "precision",
+    "AUC", "accuracy", "sensitivity", "specificity", "precision",
     "f1_score", "balanced_accuracy", "mcc"
   )
 )
 levels(accuracy_ranger_long$metric_type) <- c(
-  "Accuracy", "Sensitivity", "Specificity", "Precision",
+  "AUC", "Accuracy", "Sensitivity", "Specificity", "Precision",
   "F1 score", "Balanced\nAccuracy", "MCC"
 )
 
@@ -387,7 +387,7 @@ for (x in seq_len(nrow(xx))) {
     if (fakeyvalue < 0) fakeyvalue <- 0
     fakeyvalue <- fakeyvalue + 0.03
     text(
-      labels = round(yvalue, 2), cex = 0.7,
+      labels = round(yvalue, 2), cex = 0.6,
       x = xx[x, y], y = fakeyvalue, srt = 90, adj = 0
     )
   }
