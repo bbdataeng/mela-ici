@@ -1,7 +1,7 @@
-# load("nonsync/07_plots_random_forests.RData") # run to restore working space
+# load("nonsync/06b_plots_rf_metadaset") # run to restore working space
 
 # Load data ---------------------------------------------------------------
-load("nonsync/06_random_forests.RData") # load random forests data
+load("nonsync/06a_rf_metadataset.RData") # load random forests data
 
 # Load libraries ----------------------------------------------------------
 library(ComplexHeatmap) # v2.26.0
@@ -533,4 +533,4 @@ for (i in seq_len(nrow(to_do))) {
 rm(xx, xcm, i)
 
 # Save image --------------------------------------------------------------
-save.image("nonsync/07_plots_random_forests.RData")
+save.image("nonsync/06b_plots_rf_metadaset")

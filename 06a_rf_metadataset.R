@@ -1,4 +1,4 @@
-# load("nonsync/06_random_forests.RData") # run to restore working space
+# load("nonsync/06a_rf_metadataset.RData") # run to restore working space
 
 # Load libraries ----------------------------------------------------------
 library(ranger) # v0.17.0
@@ -11,7 +11,7 @@ source("rf_functions.R")
 # Prepare new directories -------------------------------------------------
 
 # main output folder
-output_folder <- "nonsync/06_random_forests"
+output_folder <- "nonsync/06_rf_metadataset"
 if (!dir.exists(output_folder)) dir.create(output_folder)
 
 # define combinations of rf models to be created
@@ -372,4 +372,4 @@ rm(xx, i)
 
 # Save image --------------------------------------------------------------
 
-save.image("nonsync/06_random_forests.RData")
+save.image("nonsync/06a_rf_metadataset.RData")
