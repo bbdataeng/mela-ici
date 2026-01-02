@@ -17,12 +17,21 @@ if (!dir.exists(output_folder)) dir.create(output_folder)
 to_do <- expand.grid(
   response_type = c("binary", "ordinal3", "ordinal6"),
   age_and_gender = c(TRUE, FALSE),
-  technical_predictors = c(FALSE, TRUE)
+  technical_predictors = c(FALSE, TRUE),
+  hed_data = TRUE
+)
+# add RFs with only CIBERSORTx data
+to_do <- rbind(
+  to_do, data.frame(
+    response_type = c("binary", "ordinal3", "ordinal6"),
+    age_and_gender = FALSE,
+    technical_predictors = FALSE,
+    hed_data = FALSE
+  )
 )
 # define rf formulae names
-to_do$rf_formula <- paste0("RF", 1:4) |> rep(each = 3)
 to_do$rf_formula <- paste(
-  to_do$rf_formula,
+  paste0("RF", 1:5) |> rep(each = 3),
   c("bin", "ord3", "ord6"),
   sep = "_"
 )
@@ -111,6 +120,8 @@ for (i in seq_len(nrow(to_do))) {
       vars_to_include, c("age", "gender")
     )
   }
+  # exclude HED when appropriate
+  if (!to_do$hed_data[i]) vars_to_include <- grepv("^HED", vars_to_include, invert = TRUE)
   # exclude incomplete cases
   xx <- alldata[, vars_to_include] |>
     na.exclude() |>
@@ -250,7 +261,7 @@ for (i in which(to_do$response_type != "binary")) {
     importance = "rps",
     num.threads = 0 # 0 = auto
   ) |> assign(x = to_do$rf[i]) # assign new object
-}
+} # safe to ignore warnings about min.nod.size
 ls(pattern = "^rf") # new random forests objects
 
 # save rf objects
@@ -316,12 +327,21 @@ for (i in seq_along(importances)) {
 }
 importances_df <- do.call(rbind, importances)
 
-# get ranked variable importance scores
+# prepare function for min-max normalization
+minmax_norm <- function(x) {
+  xmin <- min(x, na.rm = TRUE)
+  xmax <- max(x, na.rm = TRUE)
+  return((x - xmin) / (xmax - xmin))
+}
+
+# get transformed ranked variable importance scores
 importances_rank <- lapply(
   X = importances, FUN = function(x) {
+    # get rank
     xrank <- rank(x, na.last = TRUE)
     xrank[is.na(x)] <- NA
-    xrank <- max(xrank, na.rm = TRUE) + 1 - xrank
+    # min-max normalization
+    xrank <- minmax_norm(xrank)
     return(xrank)
   }
 )
@@ -331,12 +351,12 @@ for (i in seq_len(nrow(to_do))) {
   # prepare ordered dataframe
   xx <- data.frame(
     variable = names(importances[[i]]),
-    rank = rank(importances[[i]], na.last = TRUE),
-    importance = importances[[i]]
+    importance = importances[[i]],
+    rank = rank(importances[[i]], na.last = TRUE)
   )
   xx$rank[is.na(xx$importance)] <- NA
-  xx$rank <- max(xx$rank, na.rm = TRUE) + 1 - xx$rank
-  xx <- xx[order(xx$rank, na.last = TRUE), ]
+  xx$tr_rank <- minmax_norm(xx$rank) |> round(3)
+  xx <- xx[order(xx$rank, na.last = TRUE, decreasing = TRUE), ]
   rownames(xx) <- NULL
   # save dataframe
   write.table(xx, file.path(to_do$folder[i], paste0(

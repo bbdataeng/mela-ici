@@ -27,14 +27,24 @@ colors_response2 <- paletteer_c("grDevices::RdYlBu", nlevels(alldata$response_2l
 names(colors_response2) <- levels(alldata$response_2levels)
 
 # prepare colors for RF formulae
-rf_formulae_colors <- paletteer_d("RColorBrewer::Paired", 8)
+rf_formulae_colors <- paletteer_d("RColorBrewer::Paired", 10)
 rf_formulae_colors <- rf_formulae_colors[!as.logical(seq_along(rf_formulae_colors) %% 2)]
-names(rf_formulae_colors) <- paste0("RF", 1:4)
+names(rf_formulae_colors) <- paste0("RF", 1:5)
 # add reference in to_do
 to_do$rf_short <- substr(to_do$rf_formula, start = 1, stop = 3) |> factor()
 
 
 # Make barplots of importance scores --------------------------------------
+
+# get inverse rank of variable importance scores
+xxrank <- lapply(
+  X = importances, FUN = function(x) {
+    xrank <- rank(x, na.last = TRUE)
+    xrank[is.na(x)] <- NA
+    xrank <- max(xrank, na.rm = TRUE) + 1 - xrank
+    return(xrank)
+  }
+)
 
 for (i in seq_len(nrow(to_do))) {
   png(
@@ -61,7 +71,7 @@ for (i in seq_len(nrow(to_do))) {
     col = rf_formulae_colors[as.numeric(to_do$rf_short[i])]
   )
   text(
-    x = as.numeric(importances_df[i, ]), y = xx, labels = importances_rank[[i]],
+    x = as.numeric(importances_df[i, ]), y = xx, labels = xxrank[[i]],
     pos = ifelse(importances_df[i, ] >= 0 | is.na(importances_df[i, ]), 4, 2)
   )
   dev.off()
@@ -103,7 +113,7 @@ for (i in seq_len(nrow(to_do))) {
 vip_rank <- apply(importances_df, MARGIN = 1, FUN = function(x) {
   xx <- rank(x, na.last = TRUE)
   xx[is.na(x)] <- NA
-  xx <- max(xx, na.rm = TRUE) + 1 - xx
+  xx <- minmax_norm(xx) |> round(2)
   return(xx)
 })
 vip_rank <- vip_rank[order(rownames(vip_rank)), ] # order alphabetically
@@ -148,18 +158,14 @@ names(ann_colors) <- names(ann_df)
 # change colors for rf formula as previously defined
 ann_colors$`RF Formula` <- rf_formulae_colors
 
-# create temporary heatmap and revert row order
-ht <- Heatmap(vip_rank) |> draw()
-new_order <- row_dend(ht) |> rev()
-
 # create heatmap
 png(file.path(output_folder, "heatmap_variable_importance.png"),
   width = 8 * resol, height = 6 * resol, res = resol
 )
 Heatmap(
   vip_rank,
-  name = "Ranked Variable Importance\n(1 = most important)",
-  col = paletteer_c("viridis::viridis", 150, -1),
+  name = "Min-Max Transformed\nRanked Variable Importance\n(0 = least, 1 = most)",
+  col = paletteer_c("viridis::viridis", 150),
   show_column_names = FALSE,
   top_annotation = HeatmapAnnotation(
     show_legend = TRUE,
@@ -167,7 +173,7 @@ Heatmap(
     col = ann_colors,
     annotation_name_gp = gpar(fontface = "bold")
   ),
-  cluster_rows = new_order,
+  cluster_rows = TRUE,
   cluster_columns = FALSE,
   row_title = "Variables",
   column_title = "Random Forest models",
@@ -268,13 +274,15 @@ barplot(
 )
 for (x in seq_len(nrow(xx))) {
   for (y in seq_len(ncol(xx))) {
-    yvalue <- accuracy_ranger_long$metric[
+    yvalue <- fakeyvalue <- accuracy_ranger_long$metric[
       as.numeric(accuracy_ranger_long$rf) == x &
         as.numeric(accuracy_ranger_long$metric_type) == y
     ]
+    if (fakeyvalue < 0) fakeyvalue <- 0
+    fakeyvalue <- fakeyvalue + 0.03
     text(
-      x = xx[x, y], y = yvalue, cex = 0.7, srt = 0,
-      labels = round(yvalue, 2), pos = ifelse(yvalue >= 0, 3, 1)
+      labels = round(yvalue, 2), cex = 0.7,
+      x = xx[x, y], y = fakeyvalue, srt = 90, adj = 0
     )
   }
 }
@@ -372,13 +380,15 @@ barplot(
 )
 for (x in seq_len(nrow(xx))) {
   for (y in seq_len(ncol(xx))) {
-    yvalue <- accuracy_ordfor_long$metric[
+    yvalue <- fakeyvalue <- accuracy_ordfor_long$metric[
       as.numeric(accuracy_ordfor_long$rf_formula) == x &
         as.numeric(accuracy_ordfor_long$metric_type) == y
     ]
+    if (fakeyvalue < 0) fakeyvalue <- 0
+    fakeyvalue <- fakeyvalue + 0.03
     text(
-      x = xx[x, y], y = yvalue, cex = 0.5, srt = 0,
-      labels = round(yvalue, 2), pos = ifelse(yvalue >= 0, 3, 1)
+      labels = round(yvalue, 2), cex = 0.7,
+      x = xx[x, y], y = fakeyvalue, srt = 90, adj = 0
     )
   }
 }
@@ -388,13 +398,13 @@ text(
 )
 legend(
   bty = "n", fill = ordfor_rf_colors,
-  x = "topright", cex = 0.8, ncol = 4,
+  x = "topright", cex = 0.8, ncol = 3,
   legend = names(ordfor_rf_colors), title = "Ordinal RF model (class ranger)",
   title.font = 2
 )
 dev.off()
 # remove objects no longer needed
-rm(x, y, yvalue, xx, ylabs)
+rm(x, y, yvalue, fakeyvalue, xx, ylabs)
 
 
 # Compare 2d+ accuracy metrics for ordinal RFs ----------------------------
@@ -420,9 +430,9 @@ accuracy_ordfor_multi_wide <- cbind( # bind with data from to_do
 )
 accuracy_ordfor_multi_wide
 
-plotmat <- matrix(1:8, ncol = 4)
-plotmat <- rbind(9:12, plotmat)
-plotmat <- cbind(plotmat, c(0, 13:14))
+plotmat <- matrix(1:10, ncol = 5)
+plotmat <- rbind(11:15, plotmat)
+plotmat <- cbind(plotmat, c(0, 16:17))
 
 png(file.path(output_folder, "barplot_metrics_perClass_ordinal.png"),
   height = 6 * resol, width = 10 * resol, res = resol
