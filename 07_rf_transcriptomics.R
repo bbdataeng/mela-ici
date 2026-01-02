@@ -8,6 +8,8 @@ library(grid)
 library(cvms)
 library(paletteer)
 library(ggplot2)
+library(fields)
+library(circlize)
 source("rf_functions.R")
 
 
@@ -200,6 +202,56 @@ barplot(plotdata,
 mtext(side = 1, text = "Importance", line = par("mar")[1] - 1, las = 0)
 mtext(side = 2, text = paste0("Genes (ranked, top ", ntop, ")"), line = par("mar")[2] - 1, las = 0)
 dev.off()
+
+
+# Importance scores vs. LogFC ---------------------------------------------
+
+# prepare data
+plotdata <- data.frame(
+  genes = names(importances),
+  importance = importances,
+  importance_rank = seq_along(importances)
+) |> head(50)
+# remove gene subfix (version)
+plotdata$genes <- gsub("\\.[A-Z0-9]*", "", plotdata$genes)
+# load and merge LogFC data
+logfc <- read.delim("nonsync/autogo_response_pre_icb/NR_vs_R/DE_NR_vs_R_allres.tsv")
+plotdata <- merge(plotdata, logfc, all.x = TRUE, sort = FALSE)
+rownames(plotdata) <- plotdata$genes
+plotdata <- plotdata[order(plotdata$importance_rank, decreasing = TRUE), ]
+# prepare colors
+xpal <- paletteer_c("grDevices::RdBu", 251, -1)
+col_breaks <- seq(
+  from = -max(abs(plotdata$log2FoldChange), na.rm = TRUE),
+  to = max(abs(plotdata$log2FoldChange), na.rm = TRUE),
+  length.out = length(xpal)
+)
+col_fun <- colorRamp2(breaks = col_breaks, colors = xpal)
+# barplot
+png(file.path(output_folder, paste0(
+  "vimp_barplot_LogFC_top", ntop, ".png"
+)), width = 5 * resol, height = 10 * resol, res = resol)
+par(mar = c(5, 8, 0, 0.5), las = 2)
+barplot(importances |> head(ntop) |> rev(),
+  horiz = TRUE,
+  col = ifelse(
+    is.na(plotdata$log2FoldChange), "grey40", col_fun(plotdata$log2FoldChange)
+  )
+)
+mtext(side = 1, text = "Importance", line = par("mar")[1] - 1, las = 0)
+mtext(side = 2, text = paste0("Genes (ranked, top ", ntop, ")"), line = par("mar")[2] - 1, las = 0)
+image.plot(
+  legend.only = TRUE,
+  horizontal = FALSE,
+  zlim = range(col_breaks),
+  col = col_fun(col_breaks),
+  legend.mar = 4,
+  legend.shrink = 0.7,
+  smallplot = c(0.8, 0.85, 0.15, 0.35),
+  legend.args = list(text = "Log2FC", side = 3, line = 0.5, las = 0)
+)
+dev.off()
+
 
 
 # Barplot of prediction performance metrics -------------------------------
