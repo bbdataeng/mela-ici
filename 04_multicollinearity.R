@@ -2,6 +2,7 @@
 library(paletteer)
 library(corrplot)
 library(writexl)
+library(car)
 source("plotPCA.R")
 
 # Prepare folder for figures ----------------------------------------------
@@ -206,6 +207,30 @@ for (combination in combinations) {
   )
   dev.off()
 }
+
+
+# VIF ---------------------------------------------------------------------
+
+# prepare data for modelling (only binary response and CIBERSORTx data)
+vifdata <- cbind(response = alldata$response_2levels, xdata)
+names(vifdata) <- c("response", cell_types_sanitized)
+vifdata$response <- as.numeric(vifdata$response)
+
+# fit linear model
+xformula <- paste0("response ~ ", paste(
+  cell_types_sanitized,
+  collapse = " + "
+)) |> as.formula()
+xml <- lm(xformula, data = vifdata)
+
+# evaluate VIFs
+vifs <- vif(xml)
+range(vifs) |> round(2)
+
+# save VIFs as txt
+sink(file.path(output_folder, "vifs_cibersortx.txt"))
+print(round(vifs, 3))
+sink()
 
 
 # Correlation between all numeric variables -------------------------------
