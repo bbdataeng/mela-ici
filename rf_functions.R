@@ -38,6 +38,25 @@ get_confusion_matrix <- function(rf_object, testdata, show_sum = TRUE) {
 }
 
 
+# Plot ROC ----------------------------------------------------------------
+# only works for binary RF created with ranger
+plot_roc_auc <- function(rf_object, testdata, positive_level = "R", ...) {
+  # predicted probabilities
+  pred <- predict(
+    rf_object,
+    data = testdata, type = "response", probability = TRUE
+  )
+  # probability of positive level
+  prob_pos <- pred$predictions[, positive_level]
+  # get ROC
+  xroc <- roc(
+    response = testdata$response, predictor = prob_pos, quiet = TRUE
+  )
+  # plot ROC
+  plot(xroc, print.auc = TRUE, auc.polygon = TRUE, ...)
+}
+
+
 # Accuracy metrics --------------------------------------------------------
 get_accuracy_metrics <- function(rf_object, testdata, confusion_matrix, positive_level = "R") {
   # remove the "Sum" row and column, if present

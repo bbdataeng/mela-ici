@@ -1,10 +1,12 @@
-# load("nonsync/06b_plots_rf_metadaset") # run to restore working space
+# load("nonsync/06b_plots_rf_metadaset.RData") # run to restore working space
 
 # Load data ---------------------------------------------------------------
 load("nonsync/06a_rf_metadataset.RData") # load random forests data
 
 # Load libraries ----------------------------------------------------------
 library(ComplexHeatmap) # v2.26.0
+library(ranger)
+library(pROC)
 library(grid)
 library(paletteer)
 library(cvms)
@@ -32,6 +34,23 @@ rf_formulae_colors <- rf_formulae_colors[!as.logical(seq_along(rf_formulae_color
 names(rf_formulae_colors) <- paste0("RF", 1:5)
 # add reference in to_do
 to_do$rf_short <- substr(to_do$rf_formula, start = 1, stop = 3) |> factor()
+
+
+# ROC plots with AUC ------------------------------------------------------
+# only for binary random forests
+for (i in which(to_do$response_type == "binary")) {
+  png(file.path(to_do$folder[i], paste0("ROC_plot_", to_do$rf_formula[i], ".png")),
+      width = 4 * resol, height = 4 * resol, res = resol
+  )
+  plot_roc_auc(
+    rf_object = get(to_do$rf[i]),
+    testdata = get(to_do$df_test[i]),
+    positive_level = "R",
+    # graphical parameters
+    xaxs = "i", yaxs = "i", main = to_do$rf_formula[i], las = 1
+  )
+  dev.off()
+}
 
 
 # Make barplots of importance scores --------------------------------------
@@ -533,4 +552,4 @@ for (i in seq_len(nrow(to_do))) {
 rm(xx, xcm, i)
 
 # Save image --------------------------------------------------------------
-save.image("nonsync/06b_plots_rf_metadaset")
+save.image("nonsync/06b_plots_rf_metadaset.RData")
