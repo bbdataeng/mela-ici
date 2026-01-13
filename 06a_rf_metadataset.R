@@ -1,11 +1,14 @@
 # load("nonsync/06a_rf_metadataset.RData") # run to restore working space
 
 # Load libraries ----------------------------------------------------------
-library(ranger) # v0.17.0
-library(ordinalForest) # v2.4-4
-library(pROC) # v1.19.0.1
-library(grid)
-source("rf_functions.R")
+suppressPackageStartupMessages({
+  library(ranger) # v0.17.0
+  library(caret) # v7.0-1
+  library(ordinalForest) # v2.4-4
+  library(pROC) # v1.19.0.1
+  library(grid) # v4.5.2
+  source("rf_functions.R")
+})
 
 
 # Prepare new directories -------------------------------------------------
@@ -49,7 +52,6 @@ for (i in seq_len(nrow(to_do))) {
 
 
 # Load and prepare data ---------------------------------------------------
-
 metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds") |> as.data.frame()
 xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds") |> as.data.frame()
 hed_data <- readRDS("nonsync/01_clean_data/clean_hed.rds") |> as.data.frame()
@@ -94,53 +96,46 @@ alldata$response_2levels <- factor( # response_2levels non-ordered
   ordered = FALSE
 )
 
-# define new dataframe for each row of to_do
-to_do$df_all <- paste(
-  "df", "all", to_do$rf_formula,
-  sep = "_"
+# create a list of dataframes with the full datasets for each row of to_do
+df_all_list <- lapply(
+  X = seq_len(nrow(to_do)), FUN = function(i) {
+    # names of all variables
+    vars_to_include <- names(alldata)
+    # exclude columns
+    if (to_do$response_type[i] == "binary") { # select binary response
+      vars_to_include <- setdiff(vars_to_include, c("response_6levels", "response_3levels"))
+    } else if (to_do$response_type[i] == "ordinal3") { # select 3-level ordinal response
+      vars_to_include <- setdiff(vars_to_include, c("response_6levels", "response_2levels"))
+    } else { # select 6-level ordinal response
+      vars_to_include <- setdiff(vars_to_include, c("response_3levels", "response_2levels"))
+    }
+    # exclude technical predictors when appropriate
+    if (!to_do$technical_predictors[i]) {
+      vars_to_include <- setdiff(
+        vars_to_include, c("enrichment_protocol", "dataset")
+      )
+    }
+    # exclude age and gender when appropriate
+    if (!to_do$age_and_gender[i]) {
+      vars_to_include <- setdiff(
+        vars_to_include, c("age", "gender")
+      )
+    }
+    # exclude HED when appropriate
+    if (!to_do$hed_data[i]) vars_to_include <- grepv("^HED", vars_to_include, invert = TRUE)
+    # exclude incomplete cases
+    xx <- alldata[, vars_to_include] |>
+      na.exclude() |>
+      droplevels()
+    # uniform response variable name
+    names(xx) <- gsub("response_.levels", "response", names(xx))
+    # return dataframe
+    return(xx)
+  }
 )
-for (i in seq_len(nrow(to_do))) {
-  vars_to_include <- names(alldata)
-  # exclude columns
-  if (to_do$response_type[i] == "binary") { # select binary response
-    vars_to_include <- setdiff(vars_to_include, c("response_6levels", "response_3levels"))
-  } else if (to_do$response_type[i] == "ordinal3") { # select 3-level ordinal response
-    vars_to_include <- setdiff(vars_to_include, c("response_6levels", "response_2levels"))
-  } else { # select 6-level ordinal response
-    vars_to_include <- setdiff(vars_to_include, c("response_3levels", "response_2levels"))
-  }
-  # exclude technical predictors when appropriate
-  if (!to_do$technical_predictors[i]) {
-    vars_to_include <- setdiff(
-      vars_to_include, c("enrichment_protocol", "dataset")
-    )
-  }
-  # exclude age and gender when appropriate
-  if (!to_do$age_and_gender[i]) {
-    vars_to_include <- setdiff(
-      vars_to_include, c("age", "gender")
-    )
-  }
-  # exclude HED when appropriate
-  if (!to_do$hed_data[i]) vars_to_include <- grepv("^HED", vars_to_include, invert = TRUE)
-  # exclude incomplete cases
-  xx <- alldata[, vars_to_include] |>
-    na.exclude() |>
-    droplevels()
-  # uniform response variable name
-  names(xx) <- gsub("response_.levels", "response", names(xx))
-  # assign new object
-  assign(x = to_do$df_all[i], value = xx)
-}
-rm(xx, vars_to_include)
-ls(pattern = "^df_all") # new dataframes created
-
+names(df_all_list) <- to_do$rf_formula
 
 # Split dataset in train and test subsets ---------------------------------
-
-# prepare new object names
-to_do$df_train <- gsub("all", "train", to_do$df_all) # training data
-to_do$df_test <- gsub("all", "test", to_do$df_all) # test data
 
 # function for split stratified over the levels of a variable y
 stratified_split <- function(y, p_train = 0.8) {
@@ -157,42 +152,57 @@ stratified_split <- function(y, p_train = 0.8) {
 
 # get training data (~80%) and test data (~20%) for each case
 set.seed(123)
-for (i in seq_len(nrow(to_do))) {
-  train_idx <- get(to_do$df_all[i])$response |> stratified_split(p_train = 0.8)
-  assign(x = to_do$df_train[i], value = get(to_do$df_all[i])[train_idx, ])
-  assign(x = to_do$df_test[i], value = get(to_do$df_all[i])[-train_idx, ])
-}
-ls(pattern = "^df") # new dataframes created
+train_idx_list <- lapply(
+  X = seq_len(nrow(to_do)), FUN = function(i) {
+    stratified_split(
+      y = df_all_list[[i]]$response,
+      p_train = 0.8
+    )
+  }
+)
+df_train_list <- lapply(
+  X = seq_len(nrow(to_do)), FUN = function(i) {
+    df_all_list[[i]][train_idx_list[[i]], ]
+  }
+)
+df_test_list <- lapply(
+  X = seq_len(nrow(to_do)), FUN = function(i) {
+    df_all_list[[i]][-train_idx_list[[i]], ]
+  }
+)
+names(df_train_list) <- names(df_test_list) <- to_do$rf_formula
 
 # save data in each folder
 for (i in seq_len(nrow(to_do))) {
-  write.csv(x = get(to_do$df_train[i]), file = file.path(
+  write.csv(x = df_train_list[[i]], file = file.path(
     to_do$folder[i], paste0("data_train_", to_do$rf_formula[i], ".csv")
   ), row.names = FALSE)
-  write.csv(x = get(to_do$df_test[i]), file = file.path(
+  write.csv(x = df_test_list[[i]], file = file.path(
     to_do$folder[i], paste0("data_test_", to_do$rf_formula[i], ".csv")
   ), row.names = FALSE)
 }
 
 # define formulae
-for (i in seq_len(nrow(to_do))) {
-  predictors <- get(to_do$df_all[i]) |>
-    names() |>
-    setdiff(y = c("accession", "response")) |>
-    paste(collapse = " + ")
-  to_do$full_formula[i] <- paste0("response ~ ", predictors)
-}
+formulae_list <- lapply(
+  X = seq_len(nrow(to_do)), FUN = function(i) {
+    predictors <- names(df_all_list[[i]]) |>
+      setdiff(y = c("accession", "response")) |>
+      paste(collapse = " + ")
+    return(paste0("response ~ ", predictors))
+  }
+)
+names(formulae_list) <- to_do$rf_formula
 
 # save formula and number of observations in test/train data in each folder
 for (i in seq_len(nrow(to_do))) {
-  n_train <- nrow(get(to_do$df_train[i]))
-  n_test <- nrow(get(to_do$df_test[i]))
+  n_train <- nrow(df_train_list[[i]])
+  n_test <- nrow(df_test_list[[i]])
   sink(file.path(to_do$folder[i], paste0(
     "formula_sampleSizes_", to_do$rf_formula[i], ".txt"
   )))
   cat(paste0("===== ", to_do$rf_formula[i], " =====\n"), sep = "\n")
   cat("===== Formula =====", sep = "\n")
-  cat(to_do$full_formula[i], "\n")
+  cat(formulae_list[[i]], "\n")
   cat("\n===== Excluded data (NAs present) =====", sep = "\n")
   cat(paste0(nrow(alldata) - n_train - n_test, " observations"), sep = "\n")
   cat("\n===== Training data =====", sep = "\n")
@@ -201,74 +211,68 @@ for (i in seq_len(nrow(to_do))) {
     "%)"
   ), sep = "\n")
   cat("\nResponse levels:")
-  print(get(to_do$df_train[i])$response |> table())
+  print(df_train_list[[i]]$response |> table())
   cat("\n===== Test data =====", sep = "\n")
   cat(paste0(
     n_test, " observations (", round(n_test / (n_train + n_test), 3) * 100,
     "%)"
   ), sep = "\n")
   cat("\nResponse levels:")
-  print(get(to_do$df_test[i])$response |> table())
+  print(df_test_list[[i]]$response |> table())
   sink()
 }
 
 
 # Create random forests ---------------------------------------------------
-
-# prepare names of rf objects
-to_do$rf <- gsub("df_all", "rf", to_do$df_all)
-
-# get random forests on binary response
-for (i in which(to_do$response_type == "binary")) {
-  # get number of predictors
-  n_predictors <- strsplit(to_do$full_formula[i], split = " \\+ ") |>
-    unlist() |>
-    length()
-  # random forest
-  ranger(
-    formula = as.formula(to_do$full_formula[i]), # rf formula
-    data = get(to_do$df_train[i]), # training data
-    importance = "permutation",
-    probability = TRUE,
-    min.node.size = 5,
-    na.action = "na.fail", # no NAs expected in the training data
-    respect.unordered.factors = "partition",
-    num.trees = 1000,
-    mtry = floor(sqrt(n_predictors)),
-    seed = 1 # set seed for reproducibility
-  ) |> assign(x = to_do$rf[i]) # assign new object
-}
-ls(pattern = "^rf") # new random forests objects
-
-# get random forests on ordinal response
-for (i in which(to_do$response_type != "binary")) {
-  # get predictors
-  predictors <- to_do$full_formula[i] |>
-    gsub(pattern = "response ~ ", replacement = "") |>
-    strsplit(split = " \\+ ") |>
-    unlist()
-  # set seed for reproducibility
-  set.seed(1)
-  # ordinal random forest
-  ordfor(
-    depvar = "response", # response variable name
-    data = get(to_do$df_train[i])[, c("response", predictors)],
-    nsets = 500,
-    ntreeperdiv = 100,
-    ntreefinal = 3000,
-    mtry = floor(sqrt(length(predictors))),
-    min.node.size = 10,
-    perffunction = "probability", # uses Ranked Probability Score (RPS)
-    importance = "rps",
-    num.threads = 0 # 0 = auto
-  ) |> assign(x = to_do$rf[i]) # assign new object
-} # safe to ignore warnings about min.nod.size
-ls(pattern = "^rf") # new random forests objects
+rf_list <- lapply(
+  X = seq_len(nrow(to_do)), FUN = function(i) {
+    # get predictors
+    predictors <- formulae_list[[i]] |>
+      gsub(pattern = "response ~ ", replacement = "") |>
+      strsplit(split = " \\+ ") |>
+      unlist()
+    # binary random forest
+    if (to_do$response_type[i] == "binary") {
+      # train RF with ranger()
+      xrf <- ranger(
+        formula = as.formula(formulae_list[[i]]), # rf formula
+        data = df_train_list[[i]], # training data
+        importance = "permutation",
+        probability = TRUE,
+        min.node.size = 5,
+        na.action = "na.fail", # no NAs expected in the training data
+        respect.unordered.factors = "partition",
+        num.trees = 1000,
+        mtry = floor(sqrt(length(predictors))),
+        seed = 1 # set seed for reproducibility
+      )
+    } else { # ordinal random forest
+      # set seed for reproducibility
+      set.seed(1)
+      # train RF with ordfor()
+      xrf <- ordfor(
+        depvar = "response", # response variable name
+        data = df_train_list[[i]][, c("response", predictors)],
+        nsets = 500,
+        ntreeperdiv = 100,
+        ntreefinal = 3000,
+        mtry = floor(sqrt(length(predictors))),
+        min.node.size = 10,
+        perffunction = "probability", # uses Ranked Probability Score (RPS)
+        importance = "rps",
+        num.threads = 0 # 0 = auto
+      )
+    }
+    # return trained random forest
+    return(xrf)
+  }
+)
+names(rf_list) <- to_do$rf_formula
 
 # save rf objects
 for (i in seq_len(nrow(to_do))) {
   saveRDS(
-    object = get(to_do$rf[i]),
+    object = rf_list[[i]],
     file = file.path(to_do$folder[i], paste0("rfObject_", to_do$rf_formula[i], ".rds"))
   )
 }
@@ -279,8 +283,8 @@ confusion_matrices <- lapply( # list of confusion matrices
   X = seq_len(nrow(to_do)),
   FUN = function(i) {
     get_confusion_matrix(
-      rf_object = get(to_do$rf[i]),
-      testdata = get(to_do$df_test[i]),
+      rf_object = rf_list[[i]],
+      testdata = df_test_list[[i]],
       show_sum = TRUE
     )
   }
@@ -292,8 +296,8 @@ accuracy_metrics <- lapply( # list of accuracy metrics
   X = seq_len(nrow(to_do)),
   FUN = function(i) {
     get_accuracy_metrics(
-      rf_object = get(to_do$rf[i]),
-      testdata = get(to_do$df_test[i]),
+      rf_object = rf_list[[i]],
+      testdata = df_test_list[[i]],
       confusion_matrix = confusion_matrices[[i]],
       positive_level = "R"
     )
@@ -317,7 +321,7 @@ for (i in seq_len(nrow(to_do))) {
 # Get variable importance -------------------------------------------------
 importances <- lapply( # list of variable importances
   X = seq_len(nrow(to_do)),
-  FUN = function(i) get_importance(rf_object = get(to_do$rf[i]))
+  FUN = function(i) get_importance(rf_object = rf_list[[i]])
 )
 names(importances) <- to_do$rf_formula
 
@@ -367,9 +371,8 @@ for (i in seq_len(nrow(to_do))) {
   row.names = FALSE, sep = "\t"
   )
 }
-rm(xx, i)
 
 
 # Save image --------------------------------------------------------------
-
+rm(xx, i, n_test, n_train, vars)
 save.image("nonsync/06a_rf_metadataset.RData")

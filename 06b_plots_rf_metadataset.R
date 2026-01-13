@@ -40,11 +40,11 @@ to_do$rf_short <- substr(to_do$rf_formula, start = 1, stop = 3) |> factor()
 # only for binary random forests
 for (i in which(to_do$response_type == "binary")) {
   png(file.path(to_do$folder[i], paste0("ROC_plot_", to_do$rf_formula[i], ".png")),
-      width = 4 * resol, height = 4 * resol, res = resol
+    width = 4 * resol, height = 4 * resol, res = resol
   )
   plot_roc_auc(
-    rf_object = get(to_do$rf[i]),
-    testdata = get(to_do$df_test[i]),
+    rf_object = rf_list[[i]],
+    testdata = df_test_list[[i]],
     positive_level = "R",
     # graphical parameters
     xaxs = "i", yaxs = "i", main = to_do$rf_formula[i], las = 1
