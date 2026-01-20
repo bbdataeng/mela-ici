@@ -1,16 +1,19 @@
 # load("nonsync/07_rf_transcriptomics.RData") # run to restore working space
 
 # Load libraries ----------------------------------------------------------
-library(ranger) # v0.17.0
-library(ordinalForest) # v2.4-4
-library(pROC) # v1.19.0.1
-library(grid)
-library(cvms)
-library(paletteer)
-library(ggplot2)
-library(fields)
-library(circlize)
-source("rf_functions.R")
+suppressPackageStartupMessages({
+  library(ranger) # v0.17.0
+  library(caret) # v7.0-1
+  library(MLmetrics) # v1.1.3
+  library(pROC) # v1.19.0.1
+  library(grid) # v4.5.2
+  library(cvms) # v2.0.0
+  library(paletteer)
+  library(ggplot2)
+  library(fields)
+  library(circlize)
+  source("rf_functions.R")
+})
 
 
 # Load and prepare data ---------------------------------------------------
@@ -53,22 +56,9 @@ table(complete.cases(xdata)) # no missing data
 
 # Split dataset in train and test subsets ---------------------------------
 
-# function for split stratified over the levels of a variable y
-stratified_split <- function(y, p_train = 0.8) {
-  stopifnot(is.factor(y))
-  idx_train <- integer(0)
-  for (lvl in levels(y)) {
-    idx <- which(y == lvl)
-    if (length(idx) == 0) next
-    n_tr <- max(1, floor(length(idx) * p_train))
-    idx_train <- c(idx_train, sample(idx, n_tr))
-  }
-  sort(unique(idx_train))
-}
-
-# get training data (~80%) and test data (~20%)
-set.seed(123)
-train_idx <- xdata$response |> stratified_split(p_train = 0.8)
+# get training data (~75%) and test data (~25%)
+set.seed(100)
+train_idx <- stratified_split(y = xdata$response, p_train = 0.75)
 train_data <- xdata[train_idx, ]
 test_data <- xdata[-train_idx, ]
 
@@ -102,84 +92,115 @@ print(test_data$response |> table())
 sink()
 
 
-
-
 # Train random forest -----------------------------------------------------
 
-# define formula
-xformula <- paste0("response ~ '", paste(
-  rownames(vst),
-  collapse = "' + '"
-), "'") |> as.formula()
+# tune hyperparameters
+ctrl_binary <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  search = "random",
+  summaryFunction = twoClassSummary, # summary for binary response
+  savePredictions = "final"
+)
 
-# random forest
-xrf <- ranger(
-  y = train_data$response,
-  x = train_data[, setdiff(colnames(train_data), "response")],
+# train binary RF with 5-fold cross-validation
+set.seed(1) # set seed
+rf_cv <- train(
+  x = train_data[, -1], # variables to use for training
+  y = train_data[, 1], # response variable
+  method = "ranger",
   importance = "permutation",
-  probability = TRUE,
-  min.node.size = 5,
-  na.action = "na.fail", # no NAs expected in the training data
-  respect.unordered.factors = "partition",
   num.trees = 1000,
-  mtry = floor(sqrt(nrow(vst))),
-  seed = 1 # set seed for reproducibility
+  trControl = ctrl_binary,
+  tuneLength = 30,
+  metric = "ROC"
 )
 
 # save rf object
-saveRDS(xrf, file.path(output_folder, "rfObject.rds"))
+saveRDS(rf_cv, file.path(output_folder, "rfObject.rds"))
 
+# save summary of trained RF
+sink(file.path(output_folder, "rf_cv_results.txt"))
+print(rf_cv)
+sink()
+
+# save plot of hyperparameters tuning
+resol <- 300
+png(file.path(output_folder, "hyperpar_tuning.png"),
+  width = 6 * resol, height = 4 * resol, res = resol
+)
+# plot(rf_cv) |> print()
+ggplot(rf_cv) |> print()
+# TODO: improve colors
+dev.off()
 
 # Examine prediction performance ------------------------------------------
 
-# get confusion matrix
-conf_matrix <- get_confusion_matrix(
-  rf_object = xrf,
-  testdata = test_data,
-  show_sum = TRUE
+# predicted classes (NR/R)
+pred_classes <- predict(
+  rf_cv,
+  newdata = test_data[, -1] # test data set (without response variable)
 )
 
-# prediction performance metrics
-ppm <- get_accuracy_metrics(
-  rf_object = xrf,
-  testdata = test_data,
-  confusion_matrix = conf_matrix,
-  positive_level = "R"
+# confusion matrix and performance metrics
+conf_matrix <- confusionMatrix(
+  data = pred_classes,
+  reference = test_data[, 1], # true response in test data set
+  positive = "R"
 )
 
-# save confusion matrices and accuracy metrics
-sink(file.path(output_folder, "CM_accuracyMetrics.txt"))
-cat("===== Confusion Matrix =====", sep = "\n")
+# save report of confusion matrix
+sink(file.path(output_folder, "CM_metrics.txt"))
 print(conf_matrix)
-cat("\n===== Accuracy Metrics =====", sep = "\n")
-print(ppm)
 sink()
+
+# predicted probabilities of NR and R
+pred_probs <- predict(
+  rf_cv,
+  newdata = test_data[, -1], # test data set (without response variable)
+  type = "prob"
+)
+
+# ROC
+xroc <- roc(
+  response = test_data[, 1], # true response in test data set
+  predictor = pred_probs[, "R"], # probability of positive level
+  quiet = FALSE
+)
+
+# ROC plot with AUC
+png(file.path(output_folder, "ROC_plot.png"),
+  width = 4 * resol, height = 4 * resol, res = resol
+)
+plot(xroc,
+  print.auc = TRUE,
+  auc.polygon = TRUE,
+  xaxs = "i", yaxs = "i", las = 1
+)
+dev.off()
 
 
 # Get variable importance -------------------------------------------------
 
-# get ordered importance scores
-importances <- get_importance(rf_object = xrf)
-any(is.na(importances)) # no NAs present
-importances_rank <- seq_along(importances)
-names(importances_rank) <- names(importances)
+# extract variable importance
+vimp <- varImp(rf_cv)
 
-# save importance scores
-# prepare ordered dataframe
-xx <- data.frame(
-  variable = names(importances),
-  importance = importances,
-  rank = seq_along(importances)
+# prepare dataframe of sorted variable importance scores
+vimp_df <- vimp$importance
+vimp_df <- vimp_df[order(vimp_df$Overall, decreasing = TRUE), , drop = FALSE]
+vimp_df$Rank <- rank(vimp_df$Overall)
+vimp_df$Rank <- abs( # invert rank
+  vimp_df$Rank - max(vimp_df$Rank) - 1
 )
+
 # save dataframe
-write.table(xx, file.path(output_folder, "variable_importance.txt"),
+write.table(vimp_df, file.path(output_folder, "variable_importance.txt"),
   row.names = FALSE, sep = "\t"
 )
-rm(xx)
 
 
 # Plot settings -----------------------------------------------------------
-
 resol <- 300 # resolution in ppi
 
 # prepare colors for response (binary)
@@ -188,9 +209,10 @@ names(colors_response) <- levels(xdata$response)
 
 
 # Barplot of top importance scores ----------------------------------------
-
 ntop <- 50
-plotdata <- head(importances, ntop) |> rev()
+plotdata <- vimp_df$Overall
+names(plotdata) <- rownames(vimp_df)
+plotdata <- head(plotdata, ntop) |> rev()
 png(file.path(output_folder, paste0(
   "vimp_barplot_top", ntop, ".png"
 )), width = 5 * resol, height = 10 * resol, res = resol)
@@ -207,23 +229,23 @@ dev.off()
 # Importance scores vs. LogFC ---------------------------------------------
 
 # prepare data
-plotdata <- data.frame(
-  genes = names(importances),
-  importance = importances,
-  importance_rank = seq_along(importances)
-) |> head(50)
+plotdata2 <- data.frame(
+  genes = rownames(vimp_df),
+  importance = vimp_df$Overall,
+  importance_rank = vimp_df$Rank
+) |> head(ntop)
 # remove gene subfix (version)
-plotdata$genes <- gsub("\\.[A-Z0-9]*", "", plotdata$genes)
+plotdata2$genes <- gsub("\\.[A-Z0-9]*", "", plotdata2$genes)
 # load and merge LogFC data
 logfc <- read.delim("nonsync/autogo_response_pre_icb/NR_vs_R/DE_NR_vs_R_allres.tsv")
-plotdata <- merge(plotdata, logfc, all.x = TRUE, sort = FALSE)
-rownames(plotdata) <- plotdata$genes
-plotdata <- plotdata[order(plotdata$importance_rank, decreasing = TRUE), ]
+plotdata2 <- merge(plotdata2, logfc, all.x = TRUE, sort = FALSE)
+rownames(plotdata2) <- plotdata2$genes
+plotdata2 <- plotdata2[order(plotdata2$importance_rank, decreasing = TRUE), ]
 # prepare colors
 xpal <- paletteer_c("grDevices::RdBu", 251, -1)
 col_breaks <- seq(
-  from = -max(abs(plotdata$log2FoldChange), na.rm = TRUE),
-  to = max(abs(plotdata$log2FoldChange), na.rm = TRUE),
+  from = -max(abs(plotdata2$log2FoldChange), na.rm = TRUE),
+  to = max(abs(plotdata2$log2FoldChange), na.rm = TRUE),
   length.out = length(xpal)
 )
 col_fun <- colorRamp2(breaks = col_breaks, colors = xpal)
@@ -232,10 +254,10 @@ png(file.path(output_folder, paste0(
   "vimp_barplot_LogFC_top", ntop, ".png"
 )), width = 5 * resol, height = 10 * resol, res = resol)
 par(mar = c(5, 8, 0, 0.5), las = 2)
-barplot(importances |> head(ntop) |> rev(),
+barplot(plotdata,
   horiz = TRUE,
   col = ifelse(
-    is.na(plotdata$log2FoldChange), "grey40", col_fun(plotdata$log2FoldChange)
+    is.na(plotdata2$log2FoldChange), "grey40", col_fun(plotdata2$log2FoldChange)
   )
 )
 mtext(side = 1, text = "Importance", line = par("mar")[1] - 1, las = 0)
@@ -256,18 +278,30 @@ dev.off()
 
 # Barplot of prediction performance metrics -------------------------------
 
+# put metrics together
+metrics <- c(
+  AUC = xroc$auc |> as.numeric(),
+  conf_matrix$overall[c("Accuracy", "Kappa")],
+  conf_matrix$byClass
+)
+
+# prepare metrics to plot
 plotdata <- data.frame(
-  metric_type = factor(names(ppm), levels = c(
-    "AUC", "accuracy", "sensitivity", "specificity", "precision",
-    "f1_score", "balanced_accuracy", "mcc"
+  metric_type = factor(names(metrics), levels = c(
+    "AUC", "Accuracy", "Kappa", "Sensitivity", "Specificity",
+    "Pos Pred Value", "Neg Pred Value", "Precision", "Recall",
+    "F1", "Prevalence", "Detection Rate", "Detection Prevalence",
+    "Balanced Accuracy"
   )),
-  value = ppm,
+  value = metrics,
   row.names = NULL
 )
-levels(plotdata$metric_type) <- c(
-  "AUC", "Accuracy", "Sensitivity", "Specificity", "Precision",
-  "F1 score", "Balanced\nAccuracy", "MCC"
-)
+plotdata <- subset( # relevant subset of metrics
+  plotdata, metric_type %in% c(
+    "AUC", "Accuracy", "Sensitivity", "Specificity",
+    "Pos Pred Value", "Neg Pred Value", "Precision"
+  )
+) |> droplevels()
 
 # prepare coordinates for barplot
 xx <- barplot(
@@ -278,9 +312,9 @@ rownames(xx) <- levels(plotdata$metric_type)
 
 # create barplot
 png(file.path(output_folder, "barplot_metrics.png"),
-  width = 5 * resol, height = 3.5 * resol, res = resol
+  width = 4 * resol, height = 3.5 * resol, res = resol
 )
-par(las = 2, xpd = TRUE, tcl = -0.3, mar = c(5, 3.5, 0.8, 0.2), mgp = c(2.5, 0.8, 0))
+par(las = 2, xpd = TRUE, tcl = -0.3, mar = c(7, 3.5, 0.8, 0.2), mgp = c(2.5, 0.8, 0))
 xx <- barplot(
   value ~ metric_type,
   data = plotdata, ylim = 0:1,
@@ -302,11 +336,9 @@ rm(x, yvalue, xx)
 
 
 # Plot confusion matrix ---------------------------------------------------
-
-xx <- conf_matrix |> as.data.frame()
-xx <- subset(xx, Observed != "Sum" & Predicted != "Sum") |> droplevels()
+xx <- conf_matrix$table |> as.data.frame()
 xx <- xx[seq_len(nrow(xx)) |> rep(times = xx$Freq), ]
-xcm <- confusion_matrix(targets = xx$Observed, predictions = xx$Predicted)
+xcm <- confusion_matrix(targets = xx$Reference, predictions = xx$Prediction)
 plot_confusion_matrix(xcm,
   add_sums = TRUE, add_normalized = FALSE,
   class_order = rev(levels(xx$Observed)),
