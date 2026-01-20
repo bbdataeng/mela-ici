@@ -1,3 +1,17 @@
+# Stratified split --------------------------------------------------------
+# function for split stratified over the levels of a variable y
+stratified_split <- function(y, p_train = 0.8) {
+  stopifnot(is.factor(y))
+  idx_train <- integer(0)
+  for (lvl in levels(y)) {
+    idx <- which(y == lvl)
+    if (length(idx) == 0) next
+    n_tr <- max(1, floor(length(idx) * p_train))
+    idx_train <- c(idx_train, sample(idx, n_tr))
+  }
+  sort(unique(idx_train))
+}
+
 # Confusion matrix --------------------------------------------------------
 get_confusion_matrix <- function(rf_object, testdata, show_sum = TRUE) {
   if (class(rf_object) == "ranger") {
