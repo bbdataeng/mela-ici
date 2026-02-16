@@ -375,17 +375,29 @@ vimp_list <- lapply(
   rf_cv_binary_list, function(x) varImp(x)
 )
 
-allvars <- names(alldata) |> # names of all variables
-  grepv(pattern = "response|accession", invert = TRUE)
+# get names of all variables
+allvars <- Reduce(
+  f = union,
+  x = lapply(vimp_list, function(x) rownames(x$importance))
+) |>
+  # adjust names where needed
+  gsub(pattern = "^gender", replacement = "gender_") |>
+  gsub(pattern = "^enrichment_protocol", replacement = "enrichm_prot_") |>
+  gsub(pattern = "^dataset", replacement = "dataset_") |>
+  # alphabetical order
+  sort()
+
+# keep same variable order in each RF
 vimp_list <- lapply(
   X = rf_cv_binary_list, FUN = function(x) {
     vimp <- varImp(x)$importance
     xx <- as.vector(vimp$Overall)
-    names(xx) <- rownames(vimp)
-    names(xx) <- gsub("genderM", "gender", names(xx))
+    names(xx) <- rownames(vimp) |>
+      gsub(pattern = "^gender", replacement = "gender_") |>
+      gsub(pattern = "^enrichment_protocol", replacement = "enrichm_prot_") |>
+      gsub(pattern = "^dataset", replacement = "dataset_")
     xx <- xx[allvars]
     names(xx) <- allvars
-    # TODO: fix importances of categorical predictors
     return(xx)
   }
 )
