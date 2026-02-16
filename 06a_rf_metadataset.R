@@ -5,8 +5,10 @@ suppressPackageStartupMessages({
   library(ranger) # v0.17.0
   library(caret) # v7.0-1
   library(ordinalForest) # v2.4-4
+  library(MLmetrics) # v1.1.3
   library(pROC) # v1.19.0.1
   library(grid) # v4.5.2
+  library(ggplot2)
   source("rf_functions.R")
 })
 
@@ -33,9 +35,18 @@ to_do <- rbind(
     hed_data = FALSE
   )
 )
+# add RFs with CIBERSORTx + age and gender
+to_do <- rbind(
+  to_do, data.frame(
+    response_type = c("binary", "ordinal3", "ordinal6"),
+    age_and_gender = TRUE,
+    technical_predictors = FALSE,
+    hed_data = FALSE
+  )
+)
 # define rf formulae names
 to_do$rf_formula <- paste(
-  paste0("RF", 1:5) |> rep(each = 3),
+  paste0("RF", 1:6) |> rep(each = 3),
   c("bin", "ord3", "ord6"),
   sep = "_"
 )
@@ -137,26 +148,13 @@ names(df_all_list) <- to_do$rf_formula
 
 # Split dataset in train and test subsets ---------------------------------
 
-# function for split stratified over the levels of a variable y
-stratified_split <- function(y, p_train = 0.8) {
-  stopifnot(is.factor(y))
-  idx_train <- integer(0)
-  for (lvl in levels(y)) {
-    idx <- which(y == lvl)
-    if (length(idx) == 0) next
-    n_tr <- max(1, floor(length(idx) * p_train))
-    idx_train <- c(idx_train, sample(idx, n_tr))
-  }
-  sort(unique(idx_train))
-}
-
-# get training data (~80%) and test data (~20%) for each case
-set.seed(123)
+# get training data (~75%) and test data (~25%) for each case
 train_idx_list <- lapply(
   X = seq_len(nrow(to_do)), FUN = function(i) {
+    set.seed(100) # set same seed each time
     stratified_split(
       y = df_all_list[[i]]$response,
-      p_train = 0.8
+      p_train = 0.75
     )
   }
 )
@@ -223,150 +221,193 @@ for (i in seq_len(nrow(to_do))) {
 }
 
 
-# Create random forests ---------------------------------------------------
-rf_list <- lapply(
-  X = seq_len(nrow(to_do)), FUN = function(i) {
-    # get predictors
-    predictors <- formulae_list[[i]] |>
-      gsub(pattern = "response ~ ", replacement = "") |>
-      strsplit(split = " \\+ ") |>
-      unlist()
-    # binary random forest
-    if (to_do$response_type[i] == "binary") {
-      # train RF with ranger()
-      xrf <- ranger(
-        formula = as.formula(formulae_list[[i]]), # rf formula
-        data = df_train_list[[i]], # training data
-        importance = "permutation",
-        probability = TRUE,
-        min.node.size = 5,
-        na.action = "na.fail", # no NAs expected in the training data
-        respect.unordered.factors = "partition",
-        num.trees = 1000,
-        mtry = floor(sqrt(length(predictors))),
-        seed = 1 # set seed for reproducibility
-      )
-    } else { # ordinal random forest
-      # set seed for reproducibility
-      set.seed(1)
-      # train RF with ordfor()
-      xrf <- ordfor(
-        depvar = "response", # response variable name
-        data = df_train_list[[i]][, c("response", predictors)],
-        nsets = 500,
-        ntreeperdiv = 100,
-        ntreefinal = 3000,
-        mtry = floor(sqrt(length(predictors))),
-        min.node.size = 10,
-        perffunction = "probability", # uses Ranked Probability Score (RPS)
-        importance = "rps",
-        num.threads = 0 # 0 = auto
-      )
-    }
-    # return trained random forest
-    return(xrf)
+
+# Train binary random forests ---------------------------------------------
+
+# tune hyperparameters for binary RFs of class ranger
+ctrl_binary <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  search = "random",
+  summaryFunction = twoClassSummary, # summary for binary response
+  savePredictions = "final"
+)
+# train binary RFs with 5-fold cross-validation
+rf_cv_binary_list <- lapply(
+  X = which(to_do$response_type == "binary"), FUN = function(i) {
+    set.seed(1) # set seed inside the loop
+    train(
+      form = as.formula(formulae_list[[i]]),
+      data = df_train_list[[i]],
+      method = "ranger",
+      importance = "permutation",
+      num.trees = 1000,
+      trControl = ctrl_binary,
+      tuneLength = 30,
+      metric = "ROC"
+    )
   }
 )
-names(rf_list) <- to_do$rf_formula
+names(rf_cv_binary_list) <- to_do$rf_formula[which(to_do$response_type == "binary")]
 
 # save rf objects
-for (i in seq_len(nrow(to_do))) {
+for (i in seq_along(rf_cv_all)) {
+  j <- which(to_do$rf_formula == names(rf_cv_binary_list)[i])
   saveRDS(
-    object = rf_list[[i]],
-    file = file.path(to_do$folder[i], paste0("rfObject_", to_do$rf_formula[i], ".rds"))
+    object = rf_cv_binary_list[[i]],
+    file = file.path(to_do$folder[j], paste0("rfObject_", to_do$rf_formula[j], ".rds"))
   )
 }
 
+# Train ordinal random forests --------------------------------------------
 
-# Get confusion matrices --------------------------------------------------
-confusion_matrices <- lapply( # list of confusion matrices
-  X = seq_len(nrow(to_do)),
-  FUN = function(i) {
-    get_confusion_matrix(
-      rf_object = rf_list[[i]],
-      testdata = df_test_list[[i]],
-      show_sum = TRUE
-    )
-  }
-)
-names(confusion_matrices) <- to_do$rf_formula
+# ## ordinal random forests ##
+# # tune hyperparameters for ordinal RFs of class ordfor
+# ctrl_ordinal <- trainControl(
+#   method = "cv",
+#   number = 5,
+#   classProbs = TRUE,
+#   search = "random",
+#   summaryFunction = multiClassSummary, # summary for multi-class response
+#   savePredictions = "final"
+# )
+# # train ordinal RFs with 5-fold cross-validation
+# rf_cv_ordinal_list <- lapply(
+#   X = which(to_do$response_type != "binary"), FUN = function(i) {
+#     set.seed(1) # set seed inside the loop
+#     train(
+#       form = as.formula(formulae_list[[i]]),
+#       data = df_train_list[[i]],
+#       method = "ordinalRF",
+#       trControl = ctrl_ordinal,
+#       tuneLength = 15
+#     )
+#   }
+# )
+# names(rf_cv_ordinal_list) <- to_do$rf_formula[which(to_do$response_type != "binary")]
+#
+# # put objects together in the same order as to_do
+# rf_cv_all <- c(rf_cv_binary_list, rf_cv_ordinal_list)[to_do$rf_formula]
+#
+# # save rf objects
+# for (i in seq_len(nrow(to_do))) {
+#   saveRDS(
+#     object = rf_cv_all[[i]],
+#     file = file.path(to_do$folder[i], paste0("rfObject_", to_do$rf_formula[i], ".rds"))
+#   )
+# }
 
-# Get accuracy metrics ----------------------------------------------------
-accuracy_metrics <- lapply( # list of accuracy metrics
-  X = seq_len(nrow(to_do)),
-  FUN = function(i) {
-    get_accuracy_metrics(
-      rf_object = rf_list[[i]],
-      testdata = df_test_list[[i]],
-      confusion_matrix = confusion_matrices[[i]],
-      positive_level = "R"
-    )
-  }
-)
-names(accuracy_metrics) <- to_do$rf_formula
 
-# save confusion matrices and accuracy metrics in the respective folders
-for (i in seq_len(nrow(to_do))) {
+# Save tuned hyperparameters ----------------------------------------------
+resol <- 300 # plot resolution in PPI
+
+for (i in which(to_do$response_type == "binary")) {
+  # save summary of trained RF
   sink(file.path(to_do$folder[i], paste0(
-    "CM_accuracyMetrics_", to_do$rf_formula[i], ".txt"
+    "rf_cv_results_", to_do$rf_formula[i], ".txt"
   )))
-  cat("===== Confusion Matrix =====", sep = "\n")
+  cat(paste0("===== ", to_do$rf_formula[i], " =====\n"), sep = "\n")
+  print(rf_cv_binary_list[[to_do$rf_formula[i]]])
+  sink()
+  # save plot of hyperparameters tuning
+  png(file.path(to_do$folder[i], paste0(
+    "hyperpar_tuning_", to_do$rf_formula[i], ".png"
+  )), width = 6 * resol, height = 4 * resol, res = resol)
+  # plot(rf_cv_binary_list[[to_do$rf_formula[i]]]) |> print()
+  ggplot(rf_cv_binary_list[[to_do$rf_formula[i]]]) |> print()
+  # TODO: improve colors
+  dev.off()
+}
+
+
+# Confusion Matrix and performance metrics --------------------------------
+confusion_matrices <- lapply(
+  X = which(to_do$response_type == "binary"), FUN = function(i) {
+    xxformula <- to_do$rf_formula[i]
+    pred_classes <- predict(
+      rf_cv_binary_list[[xxformula]],
+      newdata = df_test_list[[i]]
+    )
+    confmat <- confusionMatrix(
+      data = pred_classes,
+      reference = df_test_list[[i]]$response,
+      positive = "R"
+    )
+    return(confmat)
+  }
+)
+names(confusion_matrices) <- to_do$rf_formula[which(to_do$response_type == "binary")]
+
+# save report of confusion matrix
+for (i in seq_along(confusion_matrices)) {
+  j <- which(to_do$rf_formula == names(confusion_matrices)[i])
+  sink(file.path(to_do$folder[j], paste0(
+    "CM_metrics_", to_do$rf_formula[j], ".txt"
+  )))
+  cat(paste0("===== ", to_do$rf_formula[j], " =====\n"), sep = "\n")
   print(confusion_matrices[[i]])
-  cat("\n===== Accuracy Metrics =====", sep = "\n")
-  print(accuracy_metrics[[i]])
   sink()
 }
 
 
-# Get variable importance -------------------------------------------------
-importances <- lapply( # list of variable importances
-  X = seq_len(nrow(to_do)),
-  FUN = function(i) get_importance(rf_object = rf_list[[i]])
+# ROC and AUC -------------------------------------------------------------
+rocs_list <- lapply(
+  X = which(to_do$response_type == "binary"), FUN = function(i) {
+    xxformula <- to_do$rf_formula[i]
+    pred_probs <- predict(
+      rf_cv_binary_list[[xxformula]],
+      newdata = df_test_list[[i]],
+      type = "prob"
+    )
+    xroc <- roc(
+      response = df_test_list[[i]]$response,
+      predictor = pred_probs[, "R"], # probability of positive level
+      quiet = TRUE
+    )
+    return(xroc)
+  }
 )
-names(importances) <- to_do$rf_formula
+names(rocs_list) <- to_do$rf_formula[which(to_do$response_type == "binary")]
 
-# create dataframe of variable importance scores
-vars <- names(alldata) |> grepv(pattern = "response|accession", invert = TRUE)
-for (i in seq_along(importances)) {
-  importances[[i]] <- importances[[i]][vars]
-  names(importances[[i]]) <- vars
-}
-importances_df <- do.call(rbind, importances)
+# Variable importance -----------------------------------------------------
+vimp_list <- lapply(
+  rf_cv_binary_list, function(x) varImp(x)
+)
 
-# prepare function for min-max normalization
-minmax_norm <- function(x) {
-  xmin <- min(x, na.rm = TRUE)
-  xmax <- max(x, na.rm = TRUE)
-  return((x - xmin) / (xmax - xmin))
-}
-
-# get transformed ranked variable importance scores
-importances_rank <- lapply(
-  X = importances, FUN = function(x) {
-    # get rank
-    xrank <- rank(x, na.last = TRUE)
-    xrank[is.na(x)] <- NA
-    # min-max normalization
-    xrank <- minmax_norm(xrank)
-    return(xrank)
+allvars <- names(alldata) |> # names of all variables
+  grepv(pattern = "response|accession", invert = TRUE)
+vimp_list <- lapply(
+  X = rf_cv_binary_list, FUN = function(x) {
+    vimp <- varImp(x)$importance
+    xx <- as.vector(vimp$Overall)
+    names(xx) <- rownames(vimp)
+    names(xx) <- gsub("genderM", "gender", names(xx))
+    xx <- xx[allvars]
+    names(xx) <- allvars
+    # TODO: fix importances of categorical predictors
+    return(xx)
   }
 )
 
+# create dataframe of variable importance scores
+vimp_df <- do.call(rbind, vimp_list)
+
 # save importance scores
-for (i in seq_len(nrow(to_do))) {
+for (i in seq_along(vimp_list)) {
+  j <- which(to_do$rf_formula == names(vimp_list)[i])
   # prepare ordered dataframe
   xx <- data.frame(
-    variable = names(importances[[i]]),
-    importance = importances[[i]],
-    rank = rank(importances[[i]], na.last = TRUE)
+    variable = names(vimp_list[[i]]),
+    importance = round(vimp_list[[i]], 1),
+    rank = rank(vimp_list[[i]], na.last = TRUE)
   )
   xx$rank[is.na(xx$importance)] <- NA
-  xx$tr_rank <- minmax_norm(xx$rank) |> round(3)
   xx <- xx[order(xx$rank, na.last = TRUE, decreasing = TRUE), ]
   rownames(xx) <- NULL
   # save dataframe
-  write.table(xx, file.path(to_do$folder[i], paste0(
-    "variable_importance_", to_do$rf_formula[i], ".txt"
+  write.table(xx, file.path(to_do$folder[j], paste0(
+    "variable_importance_", to_do$rf_formula[j], ".txt"
   )),
   row.names = FALSE, sep = "\t"
   )
@@ -374,5 +415,5 @@ for (i in seq_len(nrow(to_do))) {
 
 
 # Save image --------------------------------------------------------------
-rm(xx, i, n_test, n_train, vars)
+rm(xx, i, j, n_test, n_train)
 save.image("nonsync/06a_rf_metadataset.RData")
