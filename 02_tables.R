@@ -34,7 +34,7 @@ for (response in grepv("^response", names(metadata))) {
     italicize_levels() |>
     as_gt() |>
     gt::gtsave(filename = file.path(output_folder, paste0(
-      "table_by_dataset_", response, ".png"
+      "table_by_dataset_", response, ".docx"
     )))
 
 
@@ -58,7 +58,7 @@ for (response in grepv("^response", names(metadata))) {
     italicize_levels() |>
     as_gt() |>
     gt::gtsave(filename = file.path(output_folder, paste0(
-      "table_by_treatment_", response, ".png"
+      "table_by_treatment_", response, ".docx"
     )))
 
   ## table split by response
@@ -81,6 +81,6 @@ for (response in grepv("^response", names(metadata))) {
     italicize_levels() |>
     as_gt() |>
     gt::gtsave(filename = file.path(output_folder, paste0(
-      "table_by_", response, ".png"
+      "table_by_", response, ".docx"
     )))
 }
