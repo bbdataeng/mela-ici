@@ -1,63 +1,219 @@
 # load("nonsync/06b_plots_rf_metadaset.RData") # run to restore working space
 
-# Load data ---------------------------------------------------------------
-load("nonsync/06a_rf_metadataset.RData") # load random forests data
-
 # Load libraries ----------------------------------------------------------
-library(ComplexHeatmap) # v2.26.0
+library(caret)
 library(ranger)
 library(pROC)
 library(grid)
 library(paletteer)
 library(cvms)
 library(ggplot2)
+library(gt)
+
+
+# Prepare data ------------------------------------------------------------
+
+load("nonsync/06a_rf_metadataset.RData") # load random forests data
+
+# add RF short name in to_do
+to_do$rf_short <- substr(to_do$rf_formula, start = 1, stop = 3) |> factor()
+
+# keep only binary RFs in to_do
+to_do <- subset(to_do, response_type == "binary")
+rownames(to_do) <- to_do$rf_short
+
 
 # Plot settings -----------------------------------------------------------
 
 resol <- 300 # resolution in ppi
 
-# prepare colors for response (6 levels)
-colors_response6 <- paletteer_c("grDevices::RdYlBu", nlevels(alldata$response_6levels))
-names(colors_response6) <- levels(alldata$response_6levels)
-
-# prepare colors for response (3 levels)
-colors_response3 <- paletteer_c("grDevices::RdYlBu", nlevels(alldata$response_3levels))
-names(colors_response3) <- levels(alldata$response_3levels)
-
-# prepare colors for response (2 levels)
-colors_response2 <- paletteer_c("grDevices::RdYlBu", nlevels(alldata$response_2levels))
-names(colors_response2) <- levels(alldata$response_2levels)
-
 # prepare colors for RF formulae
-rf_formulae_colors <- paletteer_d("RColorBrewer::Paired", 10)
-rf_formulae_colors <- rf_formulae_colors[!as.logical(seq_along(rf_formulae_colors) %% 2)]
-names(rf_formulae_colors) <- paste0("RF", 1:5)
-# add reference in to_do
-to_do$rf_short <- substr(to_do$rf_formula, start = 1, stop = 3) |> factor()
+rf_formulae_colors <- paletteer_d("RColorBrewer::Set2", nlevels(to_do$rf_short))
+names(rf_formulae_colors) <- levels(to_do$rf_short)
+
+
+# Visualization of RF formulae --------------------------------------------
+
+formulae_data <- cbind(
+  LM22 = rep(TRUE, nrow(to_do)),
+  to_do[, c("age_and_gender", "hed_data", "technical_predictors")]
+) |> as.matrix()
+colnames(formulae_data) <- c(
+  "LM22", "Age & Sex", "HED", "Technical\nPredictors"
+)
+
+# function to add squares in a plot
+add_square <- function(x0, y0, ...) {
+  x1 <- x0 + 1
+  y1 <- y0 + 1
+  rect(
+    xleft = x0, xright = x1, ybottom = y0, ytop = y1,
+    ...
+  )
+}
+
+# draw heatmap
+png(file.path(output_folder, "RF_formulae_heatmap.png"),
+  width = 5 * resol, height = 3 * resol, res = resol
+)
+par(mar = c(0.5, 0.5, 3, 7))
+plot(
+  NULL,
+  xlim = c(0.3, ncol(formulae_data) + 1), xaxs = "i",
+  ylim = c(nrow(formulae_data), 0) + 1, yaxs = "i",
+  xlab = "", ylab = "",
+  bty = "n", axes = FALSE
+)
+rect(
+  xleft = 0.4, xright = 0.9,
+  ybottom = seq_len(nrow(formulae_data)), ytop = seq_len(nrow(formulae_data)) + 1,
+  col = rf_formulae_colors, xpd = TRUE, border = NA
+)
+for (x in seq_len(ncol(formulae_data))) {
+  for (y in seq_len(nrow(formulae_data))) {
+    add_square(x, y, col = ifelse(
+      formulae_data[y, x], "#4C72B0", "#D0D0D0"
+    ), xpd = TRUE)
+  }
+}
+text(
+  x = 0.65, y = seq_len(nrow(formulae_data)) + 0.5,
+  adj = 0.5, labels = rownames(formulae_data), xpd = TRUE
+)
+mtext(
+  side = 3, line = 1, at = seq_len(ncol(formulae_data)) + 0.5,
+  text = colnames(formulae_data), adj = 0.5, padj = 0.5
+)
+legend(
+  x = mean(c(ncol(formulae_data) + 1, grconvertX(1, from = "ndc", to = "user"))),
+  y = mean(par("usr")[3:4]), yjust = 0.5, xjust = 0.5,
+  fill = c("#4C72B0", "#D0D0D0"), legend = c("Included", "Not Included"),
+  bty = "n", xpd = TRUE
+)
+dev.off()
+
 
 
 # ROC plots with AUC ------------------------------------------------------
-# only for binary random forests
-for (i in which(to_do$response_type == "binary")) {
+
+# separately by RF model
+for (i in seq_len(nrow(to_do))) {
   png(file.path(to_do$folder[i], paste0("ROC_plot_", to_do$rf_formula[i], ".png")),
-    width = 4 * resol, height = 4 * resol, res = resol
+    width = 3 * resol, height = 3 * resol, res = resol
   )
-  plot_roc_auc(
-    rf_object = rf_list[[i]],
-    testdata = df_test_list[[i]],
-    positive_level = "R",
-    # graphical parameters
-    xaxs = "i", yaxs = "i", main = to_do$rf_formula[i], las = 1
+  plot(rocs_list[[i]],
+    print.auc = TRUE,
+    auc.polygon = TRUE,
+    main = to_do$rf_short[i],
+    xaxs = "i", yaxs = "i", las = 1,
+    print.auc.x = 0.05, print.auc.y = 0.05, print.auc.cex = 1.3,
+    print.auc.adj = c(1, 0),
+    auc.polygon.col = rf_formulae_colors[i],
+    identity.col = "black", identity.lty = "dashed"
   )
   dev.off()
 }
 
+# all together
+png(file.path(output_folder, "ROC_plots.png"),
+  width = 12 * resol, height = 2 * resol, res = resol
+)
+par(mfrow = c(1, 6), mar = c(4.1, 3.1, 3.1, 1.1))
+for (i in seq_len(nrow(to_do))) {
+  plot(rocs_list[[i]],
+    print.auc = TRUE,
+    auc.polygon = TRUE,
+    main = to_do$rf_short[i],
+    xaxs = "i", yaxs = "i", las = 1,
+    print.auc.x = 0.05, print.auc.y = 0.05, print.auc.cex = 1.3,
+    print.auc.adj = c(1, 0),
+    auc.polygon.col = rf_formulae_colors[i],
+    identity.col = "black", identity.lty = "dashed"
+  )
+}
+dev.off()
 
-# Make barplots of importance scores --------------------------------------
+
+# Barplot of median importance score --------------------------------------
+
+# calculate median importances across RFs
+median_imp <- apply(vimp_df, 2, median, na.rm = TRUE) |> sort()
+
+# make barplot
+png(
+  file.path(output_folder, "median_importance_barplot.png"),
+  width = 6 * resol, height = 8 * resol, res = resol
+)
+par(mar = c(3, 15.5, 0.5, 0.5), las = 1, mgp = c(2, 1, 0))
+xx <- barplot(median_imp, horiz = TRUE, plot = FALSE)
+varnames <- ifelse(names(median_imp) %in% names(cell_types_original),
+  cell_types_original[names(median_imp)],
+  names(median_imp)
+)
+plot(NULL,
+  xlim = c(0, 100),
+  ylim = range(xx), axes = FALSE,
+  xlab = "Median Variable Importance", ylab = ""
+)
+grid()
+barplot(median_imp,
+  horiz = TRUE, add = TRUE, names.arg = varnames,
+  col = "#4C72B0"
+)
+dev.off()
+
+
+# Dotplot of importance scores --------------------------------------------
+
+# make dotplot
+png(
+  file.path(output_folder, "median_importance_dotplot.png"),
+  width = 6 * resol, height = 8 * resol, res = resol
+)
+par(mar = c(3, 15.5, 0.5, 0.5), las = 1, mgp = c(2, 1, 0), xpd = FALSE)
+varnames <- ifelse(names(median_imp) %in% names(cell_types_original),
+  cell_types_original[names(median_imp)],
+  names(median_imp)
+)
+plot(NULL,
+  xlim = c(1, 100),
+  ylim = c(0, length(median_imp)) + 0.5, yaxt = "n", yaxs = "i",
+  xlab = "Variable Importance", ylab = "",
+  bty = "n"
+)
+grid()
+segments(
+  x0 = rep(par("usr")[1]), x1 = rep(par("usr")[2]),
+  y0 = seq_along(median_imp), y1 = seq_along(median_imp),
+  col = "lightgray", lty = "dotted"
+)
+segments(
+  x0 = rep(0, length(median_imp)), x1 = median_imp,
+  y0 = seq_along(median_imp), y1 = seq_along(median_imp),
+  col = "#4C72B0", lwd = 5, lend = 0
+)
+set.seed(123456)
+for (i in seq_along(median_imp)) {
+  points(
+    x = vimp_df[, names(median_imp)[i]],
+    y = jitter(rep(i, nrow(vimp_df)), amount = 0.15),
+    bg = rf_formulae_colors, pch = 21, cex = 1.1
+  )
+}
+axis(side = 2, at = seq_along(varnames), labels = varnames, tick = FALSE)
+legend(
+  x = "bottomright", pch = 21, pt.bg = rf_formulae_colors,
+  title = "Model", title.font = 1,
+  legend = names(rf_formulae_colors), ncol = 2, xpd = TRUE
+)
+dev.off()
+
+
+# Barplots of importance scores by RF model -------------------------------
 
 # get inverse rank of variable importance scores
 xxrank <- lapply(
-  X = importances, FUN = function(x) {
+  X = vimp_list, FUN = function(x) {
     xrank <- rank(x, na.last = TRUE)
     xrank[is.na(x)] <- NA
     xrank <- max(xrank, na.rm = TRUE) + 1 - xrank
@@ -65,33 +221,35 @@ xxrank <- lapply(
   }
 )
 
+# for each RF
 for (i in seq_len(nrow(to_do))) {
+  # make barplot of all importances
   png(
     file.path(to_do$folder[i], paste0(
       "vimp_barplot_", to_do$rf_formula[i], ".png"
     )),
-    width = 8 * resol, height = 8 * resol, res = resol
+    width = 6 * resol, height = 8 * resol, res = resol
   )
-  par(mar = c(5.1, 12.5, 1.5, 0.5), las = 2)
-  xx <- barplot(importances_df[i, ], horiz = TRUE, plot = FALSE)
-  xlim <- range(importances_df[i, ], na.rm = TRUE)
+  par(mar = c(3, 15.5, 1.5, 0.5), las = 1)
+  xx <- barplot(vimp_df[i, ], horiz = TRUE, plot = FALSE)
+  xlim <- range(vimp_df[i, ], na.rm = TRUE)
   xlim <- xlim + c(-diff(xlim) * 0.1, diff(xlim) * 0.1)
-  varnames <- ifelse(names(importances_df[i, ]) %in% names(cell_types_original),
-    cell_types_original[names(importances_df[i, ])],
-    names(importances_df[i, ])
+  varnames <- ifelse(names(vimp_df[i, ]) %in% names(cell_types_original),
+    cell_types_original[names(vimp_df[i, ])],
+    names(vimp_df[i, ])
   )
   plot(NULL,
     xlim = xlim, ylim = range(xx), axes = FALSE,
     xlab = "Variable Importance", ylab = "",
-    main = to_do$rf_formula[i]
+    main = to_do$rf_short[i]
   )
-  barplot(importances_df[i, ],
+  barplot(vimp_df[i, ],
     horiz = TRUE, add = TRUE, names.arg = varnames,
-    col = rf_formulae_colors[as.numeric(to_do$rf_short[i])]
+    col = rf_formulae_colors[i]
   )
   text(
-    x = as.numeric(importances_df[i, ]), y = xx, labels = xxrank[[i]],
-    pos = ifelse(importances_df[i, ] >= 0 | is.na(importances_df[i, ]), 4, 2)
+    x = as.numeric(vimp_df[i, ]), y = xx, labels = xxrank[[i]],
+    pos = ifelse(vimp_df[i, ] >= 0 | is.na(vimp_df[i, ]), 4, 2)
   )
   dev.off()
   # make barplot of top 10 importance scores
@@ -101,8 +259,8 @@ for (i in seq_len(nrow(to_do))) {
     )),
     width = 6 * resol, height = 4 * resol, res = resol
   )
-  par(mar = c(5.1, 12.5, 1.5, 0.5), las = 2)
-  top10 <- importances_df[i, ] |>
+  par(mar = c(3, 15.5, 1.5, 0.5), las = 1)
+  top10 <- vimp_df[i, ] |>
     sort(decreasing = TRUE) |>
     head(10)
   xx <- barplot(top10, horiz = TRUE, plot = FALSE)
@@ -114,114 +272,43 @@ for (i in seq_len(nrow(to_do))) {
   plot(NULL,
     xlim = xlim, ylim = rev(range(xx)) + c(0.5, 0), axes = FALSE,
     xlab = "Variable Importance", ylab = "",
-    main = to_do$rf_formula[i]
+    main = to_do$rf_short[i]
   )
   barplot(top10,
     horiz = TRUE, add = TRUE,
     names.arg = varnames,
-    col = rf_formulae_colors[as.numeric(to_do$rf_short[i])]
+    col = rf_formulae_colors[i]
   )
   text(x = as.numeric(top10), y = xx, labels = 1:10, pos = 4)
   dev.off()
 }
 
 
-# Compare variable importance across models -------------------------------
-
-# data frame of variable importance ranks
-vip_rank <- apply(importances_df, MARGIN = 1, FUN = function(x) {
-  xx <- rank(x, na.last = TRUE)
-  xx[is.na(x)] <- NA
-  xx <- minmax_norm(xx) |> round(2)
-  return(xx)
-})
-vip_rank <- vip_rank[order(rownames(vip_rank)), ] # order alphabetically
-rownames(vip_rank) <- ifelse(
-  rownames(vip_rank) %in% names(cell_types_original),
-  cell_types_original[rownames(vip_rank)],
-  rownames(vip_rank)
-)
-
-# prepare annotation dataframe
-ann_df <- data.frame(
-  to_do[, c("response_type", "rf_short")],
-  row.names = colnames(vip_rank)
-)
-ann_df$response_levels <- ifelse(
-  ann_df$response_type == "binary", 2, ifelse(
-    ann_df$response_type == "ordinal3", 3, 6
-  )
-)
-ann_df$rf_class <- ifelse(ann_df$response_levels == 2, "ranger", "ordfor")
-ann_df <- ann_df[, c("rf_class", "response_levels", "rf_short")]
-names(ann_df) <- c("RF Object Class", "N. Response Levels", "RF Formula")
-
-# prepare annotation colors
-palettes <- c(
-  "ggsci::default_nejm", "ggthemes::Green", "RColorBrewer::Paired"
-)
-names(palettes) <- names(ann_df)
-ann_colors <- lapply(names(ann_df), FUN = function(x) {
-  xvar <- ann_df[, x]
-  if (is.logical(xvar) | is.character(xvar)) xvar <- factor(xvar)
-  if (is.factor(xvar)) {
-    cols <- paletteer_d(palettes[x], nlevels(xvar))
-    names(cols) <- levels(xvar)
-  } else {
-    cols <- paletteer_c(palettes[x], length(unique(xvar)))
-    names(cols) <- sort(unique(xvar))
-  }
-  return(cols)
-})
-names(ann_colors) <- names(ann_df)
-# change colors for rf formula as previously defined
-ann_colors$`RF Formula` <- rf_formulae_colors
-
-# create heatmap
-png(file.path(output_folder, "heatmap_variable_importance.png"),
-  width = 8 * resol, height = 6 * resol, res = resol
-)
-Heatmap(
-  vip_rank,
-  name = "Min-Max Transformed\nRanked Variable Importance\n(0 = least, 1 = most)",
-  col = paletteer_c("viridis::viridis", 150),
-  show_column_names = FALSE,
-  top_annotation = HeatmapAnnotation(
-    show_legend = TRUE,
-    df = ann_df,
-    col = ann_colors,
-    annotation_name_gp = gpar(fontface = "bold")
-  ),
-  cluster_rows = TRUE,
-  cluster_columns = FALSE,
-  row_title = "Variables",
-  column_title = "Random Forest models",
-  heatmap_legend_param = list(
-    legend_direction = "horizontal",
-    legend_width = unit(4, "cm") # adjust to taste
-  )
-) |> draw(
-  merge_legend = TRUE, # all legends in one column
-  heatmap_legend_side = "right", # keep everything on the right
-  annotation_legend_side = "right"
-)
-dev.off()
-
-
 # Compare accuracy metrics for binary RFs ---------------------------------
 
-# see metrics of ranger (binary) random forests
-names(accuracy_metrics[[1]])
+# put metrics together
+metrics_binary <- lapply(
+  X = names(rf_cv_binary_list), FUN = function(x) {
+    xauc <- rocs_list[[x]]$auc |> as.numeric()
+    x1 <- confusion_matrices[[x]]$overall[c("Accuracy", "Kappa")]
+    x2 <- confusion_matrices[[x]]$byClass
+    return(c(
+      AUC = xauc,
+      x1, x2
+    ))
+  }
+)
+names(metrics_binary) <- names(rf_cv_binary_list)
 
-# put together metrics of binary random forests
+# prepare a dataframe
 accuracy_ranger_wide <- cbind(
   to_do[
     to_do$response_type == "binary",
     c("rf_short", "technical_predictors", "age_and_gender")
   ],
   sapply(
-    X = which(to_do$response_type == "binary"),
-    FUN = function(x) accuracy_metrics[[x]]
+    X = to_do$rf_formula[to_do$response_type == "binary"],
+    FUN = function(x) metrics_binary[[x]]
   ) |>
     t() |> as.data.frame()
 )
@@ -230,14 +317,18 @@ accuracy_ranger_wide <- cbind(
 accuracy_ranger_long <- reshape(
   data = accuracy_ranger_wide,
   varying = c(
-    "AUC", "accuracy", "sensitivity", "specificity", "precision",
-    "f1_score", "balanced_accuracy", "mcc"
+    "AUC", "Accuracy", "Kappa", "Sensitivity", "Specificity",
+    "Pos Pred Value", "Neg Pred Value", "Precision", "Recall",
+    "F1", "Prevalence", "Detection Rate", "Detection Prevalence",
+    "Balanced Accuracy"
   ),
   v.names = "metric",
   idvar = "rf_short",
   times = c(
-    "AUC", "accuracy", "sensitivity", "specificity", "precision",
-    "f1_score", "balanced_accuracy", "mcc"
+    "AUC", "Accuracy", "Kappa", "Sensitivity", "Specificity",
+    "Pos Pred Value", "Neg Pred Value", "Precision", "Recall",
+    "F1", "Prevalence", "Detection Rate", "Detection Prevalence",
+    "Balanced Accuracy"
   ),
   timevar = "metric_type",
   direction = "long"
@@ -245,13 +336,20 @@ accuracy_ranger_long <- reshape(
 accuracy_ranger_long$metric_type <- factor( # metric type as factor
   accuracy_ranger_long$metric_type,
   levels = c(
-    "AUC", "accuracy", "sensitivity", "specificity", "precision",
-    "f1_score", "balanced_accuracy", "mcc"
+    "AUC", "Accuracy", "Kappa", "Sensitivity", "Specificity",
+    "Pos Pred Value", "Neg Pred Value", "Precision", "Recall",
+    "F1", "Prevalence", "Detection Rate", "Detection Prevalence",
+    "Balanced Accuracy"
   )
 )
+accuracy_ranger_long <- subset(
+  accuracy_ranger_long, metric_type %in% c(
+    "Accuracy", "Sensitivity", "Specificity",
+    "Pos Pred Value", "Neg Pred Value"
+  )
+) |> droplevels()
 levels(accuracy_ranger_long$metric_type) <- c(
-  "AUC", "Accuracy", "Sensitivity", "Specificity", "Precision",
-  "F1 score", "Balanced\nAccuracy", "MCC"
+  "Accuracy", "Sensitivity", "Specificity", "PPV", "NPV"
 )
 
 # prepare coordinates for barplot
@@ -264,13 +362,13 @@ rownames(xx) <- levels(accuracy_ranger_long$rf_short)
 colnames(xx) <- levels(accuracy_ranger_long$metric_type)
 # create barplot
 png(file.path(output_folder, "barplot_metrics_binary.png"),
-  width = 9 * resol, height = 3.5 * resol, res = resol
+  width = 6 * resol, height = 3.5 * resol, res = resol
 )
-par(las = 1, xpd = TRUE, tcl = -0.3, mar = c(4, 3.5, 3, 0.2), mgp = c(2.5, 0.8, 0))
+par(las = 1, xpd = TRUE, tcl = -0.3, mar = c(2, 3.5, 4, 0.2), mgp = c(2.5, 0.8, 0))
 ylabs <- seq(from = 0, to = 1, by = 0.25)
 plot(NULL,
   xlim = range(xx), xaxt = "n",
-  ylim = c(-0.1, 1), yaxs = "i", yaxt = "n",
+  ylim = c(0, 1), yaxs = "i", yaxt = "n",
   xlab = "", ylab = "Value", bty = "n"
 )
 axis(side = 2, at = ylabs)
@@ -284,11 +382,11 @@ barplot(
   add = TRUE, axes = FALSE, axisnames = FALSE,
   beside = TRUE, col = rf_formulae_colors,
   legend = TRUE, args.legend = list(
-    title = "Binary RF model", horiz = TRUE,
+    title = "Random Forest model", horiz = TRUE,
     title.font = 2, bty = "n", xpd = TRUE,
     x = mean(par("usr")[1:2]),
-    y = grconvertY(0, from = "ndc", to = "user"),
-    xjust = 0.5, yjust = 0
+    y = grconvertY(1, from = "ndc", to = "user"),
+    xjust = 0.5, yjust = 1
   )
 )
 for (x in seq_len(nrow(xx))) {
@@ -300,238 +398,28 @@ for (x in seq_len(nrow(xx))) {
     if (fakeyvalue < 0) fakeyvalue <- 0
     fakeyvalue <- fakeyvalue + 0.03
     text(
-      labels = round(yvalue, 2), cex = 0.7,
+      labels = round(yvalue, 3), cex = 0.7,
       x = xx[x, y], y = fakeyvalue, srt = 90, adj = 0
     )
   }
 }
-text(
-  x = apply(xx, 2, mean), y = -0.15, adj = c(0.5, 0.5),
-  labels = levels(accuracy_ranger_long$metric_type)
+mtext(
+  text = levels(accuracy_ranger_long$metric_type),
+  side = 1, at = apply(xx, 2, mean),
+  line = 0.5
 )
+
 dev.off()
 # remove objects no longer needed
 rm(x, y, yvalue, xx, ylabs)
 
 
-# Compare 1d accuracy metrics for ordinal RFs -----------------------------
-
-# see metrics of ordfor (ordinal) random forests
-names(accuracy_metrics[[2]])
-
-# put together monodimensional metrics
-monodim_metrics_ordfor <- c( # names of 1d accuracy metrics
-  "overall_accuracy", "macro_F1", "weighted_F1", "MAE",
-  "adjacent_error_rate", "nonadjacent_error_rate", "QWK"
-)
-accuracy_ordfor_1d_wide <- lapply(
-  X = accuracy_metrics[to_do$response_type != "binary"],
-  FUN = function(x) x[monodim_metrics_ordfor]
-) |>
-  unlist() |> # unlist
-  matrix( # create matrix
-    ncol = length(monodim_metrics_ordfor), byrow = TRUE, dimnames = list(
-      to_do$rf_formula[to_do$response_type != "binary"], # row names: ordinal rf models
-      monodim_metrics_ordfor # column names: 1d accuracy metrics
-    )
-  )
-accuracy_ordfor_1d_wide <- cbind( # bind with data from to_do
-  to_do[
-    to_do$response_type != "binary",
-    c("rf_formula", "rf_short")
-  ],
-  accuracy_ordfor_1d_wide
-)
-
-# reshape into long format
-accuracy_ordfor_long <- reshape(
-  data = accuracy_ordfor_1d_wide,
-  varying = monodim_metrics_ordfor,
-  v.names = "metric",
-  idvar = "rf_formula",
-  times = monodim_metrics_ordfor,
-  timevar = "metric_type",
-  direction = "long"
-)
-accuracy_ordfor_long$metric_type <- factor( # metric type as factor
-  accuracy_ordfor_long$metric_type,
-  levels = monodim_metrics_ordfor
-)
-levels(accuracy_ordfor_long$metric_type) <- c(
-  "Overall\nAccuracy", "Macro F1", "Weighted F1", "MAE",
-  "Adjacent\nError Rate", "Non-Adjacent\nError Rate", "QWK"
-)
-accuracy_ordfor_long$rf_formula <- as.factor(accuracy_ordfor_long$rf_formula)
-
-# define colors of binary rf models
-ordfor_rf_colors <- paletteer_d("RColorBrewer::Paired", nlevels(accuracy_ordfor_long$rf_formula))
-names(ordfor_rf_colors) <- levels(accuracy_ordfor_long$rf_formula)
-
-# prepare coordinates for barplot
-xx <- barplot(
-  metric ~ rf_formula + metric_type,
-  data = accuracy_ordfor_long,
-  beside = TRUE, plot = FALSE
-)
-rownames(xx) <- levels(accuracy_ordfor_long$rf_formula)
-colnames(xx) <- levels(accuracy_ordfor_long$metric_type)
-# create barplot
-png(file.path(output_folder, "barplot_metrics_ordinal.png"),
-  width = 10 * resol, height = 4 * resol, res = resol
-)
-par(las = 1, xpd = TRUE, tcl = -0.3, mar = c(2, 3.5, 1.5, 0.2), mgp = c(2.5, 0.8, 0))
-ylabs <- seq(from = 0, to = max(accuracy_ordfor_long$metric), by = 0.25)
-plot(NULL,
-  xlim = range(xx), xaxt = "n",
-  ylim = range(accuracy_ordfor_long$metric), yaxt = "n",
-  xlab = "", ylab = "Value", bty = "n"
-)
-axis(side = 2, at = ylabs)
-segments(
-  x0 = par("usr")[1], x1 = par("usr")[2],
-  y0 = 0, y1 = 0, lty = 1, col = "black", lwd = 1
-)
-barplot(
-  metric ~ rf_formula + metric_type,
-  data = accuracy_ordfor_long,
-  add = TRUE, axes = FALSE, axisnames = FALSE,
-  beside = TRUE, col = ordfor_rf_colors
-)
-for (x in seq_len(nrow(xx))) {
-  for (y in seq_len(ncol(xx))) {
-    yvalue <- fakeyvalue <- accuracy_ordfor_long$metric[
-      as.numeric(accuracy_ordfor_long$rf_formula) == x &
-        as.numeric(accuracy_ordfor_long$metric_type) == y
-    ]
-    if (fakeyvalue < 0) fakeyvalue <- 0
-    fakeyvalue <- fakeyvalue + 0.03
-    text(
-      labels = round(yvalue, 2), cex = 0.6,
-      x = xx[x, y], y = fakeyvalue, srt = 90, adj = 0
-    )
-  }
-}
-text(
-  x = apply(xx, 2, mean), y = -0.3, adj = c(0.5, 0.5),
-  labels = levels(accuracy_ordfor_long$metric_type)
-)
-legend(
-  bty = "n", fill = ordfor_rf_colors,
-  x = "topright", cex = 0.8, ncol = 3,
-  legend = names(ordfor_rf_colors), title = "Ordinal RF model (class ranger)",
-  title.font = 2
-)
-dev.off()
-# remove objects no longer needed
-rm(x, y, yvalue, fakeyvalue, xx, ylabs)
-
-
-# Compare 2d+ accuracy metrics for ordinal RFs ----------------------------
-
-# see metrics of ordfor (ordinal) random forests
-names(accuracy_metrics[[2]])
-
-# put together monodimensional metrics
-multidim_metrics_ordfor <- c( # names of multidimensional accuracy metrics
-  "sensitivity_per_class", "precision_per_class", "f1_per_class"
-)
-accuracy_ordfor_multi_wide <- lapply(
-  X = accuracy_metrics[to_do$response_type != "binary"],
-  FUN = function(x) x[multidim_metrics_ordfor]
-) |>
-  do.call(what = rbind)
-accuracy_ordfor_multi_wide <- cbind( # bind with data from to_do
-  to_do[
-    to_do$response_type != "binary",
-    c("rf_formula", "rf_short")
-  ],
-  accuracy_ordfor_multi_wide
-)
-accuracy_ordfor_multi_wide
-
-plotmat <- matrix(1:10, ncol = 5)
-plotmat <- rbind(11:15, plotmat)
-plotmat <- cbind(plotmat, c(0, 16:17))
-
-png(file.path(output_folder, "barplot_metrics_perClass_ordinal.png"),
-  height = 6 * resol, width = 10 * resol, res = resol
-)
-layout(plotmat, heights = c(1, 6, 6))
-par(
-  las = 2, mar = c(4, 3.5, 0.5, 0.5),
-  mgp = c(2.5, 0.8, 0), tcl = -0.3, xpd = TRUE
-)
-for (i in seq_len(nrow(accuracy_ordfor_multi_wide))) {
-  xxtype <- length(accuracy_ordfor_multi_wide[[i, 5]])
-  xx <- accuracy_ordfor_multi_wide[i, ][3:5] |>
-    unlist() |>
-    matrix(nrow = xxtype)
-  # xx[is.nan(xx) | is.na(xx)] <- 0
-  dimnames(xx) <- list(
-    names(accuracy_ordfor_multi_wide[[i, 3]]),
-    gsub("_per_class", "", names(accuracy_ordfor_multi_wide)[3:5])
-  )
-  xxcoords <- barplot(xx,
-    las = 2,
-    beside = T, ylim = 0:1, space = c(0, 2), plot = FALSE
-  )
-  plot(NULL,
-    xlim = range(xxcoords) + c(-1, 1), ylim = 0:1,
-    ylab = "Value", xlab = "", xaxt = "n", bty = "n", yaxs = "i"
-  )
-  rect(
-    xleft = par("usr")[1], xright = par("usr")[2],
-    ybottom = par("usr")[3], ytop = par("usr")[4], col = "gray90", border = NA
-  )
-  barplot(xx,
-    add = T,
-    beside = T, ylim = c(-0.05, 1.05), las = 2,
-    col = if (xxtype == 3) {
-      colors_response3
-    } else {
-      colors_response6
-    },
-    ylab = "Value", names.arg = rep("", ncol(xx)),
-    space = c(0, 2)
-  )
-  text(
-    x = apply(xxcoords, 2, mean), y = -0.05, srt = 45, labels = colnames(xx),
-    adj = 1
-  )
-}
-# add column titles (RF formulas)
-par(mar = c(0.5, 3.5, 0.5, 0.5), mgp = rep(0, 3))
-for (xx in levels(accuracy_ordfor_multi_wide$rf_short)) {
-  plot(NULL, xlim = c(-1, 1), ylim = c(-1, 1), axes = FALSE, ann = FALSE)
-  text(
-    x = 0, y = 0,
-    labels = xx, font = 2, cex = 1.5
-  )
-}
-
-# add color legend
-par(mar = rep(0.5, 4), mgp = rep(0, 3))
-plot(NULL, xlim = c(-1, 1), ylim = c(-1, 1), axes = FALSE, ann = FALSE)
-legend(
-  x = 0, y = 0, xjust = 0.5, yjust = 0.5,
-  legend = names(colors_response3), fill = colors_response3,
-  bty = "n", cex = 1.3, title = "Response\n(ordinal, 3 levels)", title.font = 2
-)
-plot(NULL, xlim = c(-1, 1), ylim = c(-1, 1), axes = FALSE, ann = FALSE)
-legend(
-  x = 0, y = 0, xjust = 0.5, yjust = 0.5,
-  legend = names(colors_response6), fill = colors_response6,
-  bty = "n", cex = 1.3, title = "Response\n(ordinal, 6 levels)", title.font = 2
-)
-dev.off()
-
-
 # Plot confusion matrices -------------------------------------------------
 for (i in seq_len(nrow(to_do))) {
-  xx <- confusion_matrices[[i]] |> as.data.frame()
-  xx <- subset(xx, Observed != "Sum" & Predicted != "Sum") |> droplevels()
+  xform <- to_do$rf_formula[i]
+  xx <- confusion_matrices[[xform]]$table |> as.data.frame()
   xx <- xx[seq_len(nrow(xx)) |> rep(times = xx$Freq), ]
-  xcm <- confusion_matrix(targets = xx$Observed, predictions = xx$Predicted)
+  xcm <- confusion_matrix(targets = xx$Reference, predictions = xx$Prediction)
   plot_confusion_matrix(xcm,
     add_sums = TRUE, add_normalized = FALSE,
     class_order = rev(levels(xx$Observed)),
@@ -549,7 +437,51 @@ for (i in seq_len(nrow(to_do))) {
     width = 3, height = 3, units = "in", dpi = 300
   )
 }
-rm(xx, xcm, i)
+rm(xx, xcm, i, xform)
+
+
+# Table of sample sizes ---------------------------------------------------
+
+tab2 <- lapply(to_do$rf_formula, FUN = function(x) {
+  c(
+    n_train = nrow(df_train_list[[x]]),
+    tab_train = table(df_train_list[[x]]$response),
+    n_test = nrow(df_test_list[[x]]),
+    tab_test = table(df_test_list[[x]]$response)
+  )
+}) |>
+  do.call(what = rbind) |>
+  as.data.frame()
+tab2 <- cbind(RF = to_do$rf_short, tab2)
+
+# save table as excel
+writexl::write_xlsx(
+  tab2,
+  file.path(output_folder, "sample_sizes_rawtable.xlsx"),
+  format_headers = TRUE
+)
+
+
+# nicely format table and save as figure
+xtab <- gt(tab2) |>
+  tab_spanner(
+    label = md("**Training/Validation data**"),
+    columns = contains("train")
+  ) |>
+  tab_spanner(
+    label = md("**Test data**"),
+    columns = contains("test")
+  ) |>
+  cols_label(
+    ends_with(".R") ~ "R",
+    ends_with(".NR") ~ "NR",
+    starts_with("n_") ~ "Total",
+    matches("RF") ~ md("**Model**")
+  ) |>
+  cols_width(everything() ~ px(70)) |>
+  cols_align("center", everything()) |>
+  data_color(columns = "RF", method = "factor", palette = rf_formulae_colors)
+gtsave(xtab, file.path(output_folder, "sample_sizes_table.png"))
 
 # Save image --------------------------------------------------------------
 save.image("nonsync/06b_plots_rf_metadaset.RData")
