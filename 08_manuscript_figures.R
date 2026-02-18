@@ -23,15 +23,15 @@ volcanodata <- read.table(
   header = TRUE,
   row.names = 1
 )
-# remove NAs
-volcanodata <- volcanodata[!is.na(volcanodata$padj), ]
 # order by lowest adjusted p value
 volcanodata <- volcanodata[order(volcanodata$padj), ]
 # define thresholds
 thr_lfc <- 1
 thr_padj <- 0.05
 # genes to label
-sig_genes <- subset(volcanodata, abs(log2FoldChange) > thr_lfc & padj < thr_padj) |> rownames()
+sig_genes <- volcanodata |>
+  subset(abs(log2FoldChange) > thr_lfc & padj < thr_padj) |>
+  rownames()
 n_top_genes_to_label <- 30
 genes_to_label <- c( #
   head(sig_genes, n_top_genes_to_label), # top n genes by pvalue
@@ -40,26 +40,26 @@ genes_to_label <- c( #
 stopifnot(all(genes_to_label %in% sig_genes))
 # create volcano plot
 set.seed(123)
-my_volcano_wLabels(
-  x = volcanodata, # data
-  main = paste0( # title
+my_volcano_plot(
+  dea_res = volcanodata, # data.frame with differential expression results; must contain columns 'log2FoldChange' and 'padj'; rownames = gene IDs
+  main = paste0( # main title of the plot (character string)
     "Volcano plot of NR vs R\n",
     "with ABS(Log2FC) > ", thr_lfc,
-    " and adjusted P-value < ", thr_padj # ,
-    # "\nTop ", n_genes_to_label, " genes by lowest adjusted P-value are labeled"
+    " and adjusted P-value < ", thr_padj
   ),
-  cutoff_log2FC = thr_lfc, # cutoff for fold change
-  cutoff_padj = thr_padj, # cutoff for p value
-  deg_list = NULL, # leave empty
-  label_genes = genes_to_label, # list of genes to be labeled
-  col_up_genes = rgb(1, 0, 0, alpha = 0.5), # color for upregulated genes
-  col_down_genes = rgb(0, 0, 1, alpha = 0.5), # color for downregulated genes
-  col_other_genes = rgb(0.5, 0.5, 0.5, alpha = 0.2), # color for other genes
-  file_path = file.path(plots_folder, "volcano_NR_vs_R.png"), # file path
-  xlim_range = c( # range of x-axis
+  cutoff_log2FC = thr_lfc, # numeric threshold for |log2FoldChange|
+  cutoff_padj = thr_padj, # numeric adjusted p-value threshold
+  genes_to_label = genes_to_label, # optional character vector of gene IDs to label on the plot
+  col_up_genes = "red", # color for up-regulated genes (any valid R color)
+  col_down_genes = "blue", # color for down-regulated genes (any valid R color)
+  col_other_genes = "grey40", # color for non-significant genes (any valid R color)
+  file_path = file.path(plots_folder, "volcano_NR_vs_R.png"), # optional file path with extension
+  xlim_range = c( # optional numeric vector of length 2 to set x-axis limits with clipping at boundaries
     -max(abs(volcanodata$log2FoldChange)), max(abs(volcanodata$log2FoldChange))
   ),
-  report_cutoffs = FALSE # cutoffs manually added in the title already
+  width_in = 6, # numeric width (in inches) used when saving the plot
+  height_in = 6, # numeric height (in inches) used when saving the plot
+  show_legend = TRUE # logical; if TRUE show legend, if FALSE hide legend
 )
 
 
@@ -178,14 +178,14 @@ colors_celltypes <- paletteer_d("ggsci::default_igv", nrow(rotdata))
 # open graphic device
 png(
   filename = file.path(plots_folder, "PCA_PC1PC2.png"),
-  width = resol * 15, height = resol * 4, res = resol
+  width = resol * 15, height = resol * 3.5, res = resol
 )
 
 # set graphical parameters
 par(
   mfrow = c(1, 4),
-  mar = c(2.5, 2.5, 2.5, 0.2), mgp = c(1.5, 0.4, 0),
-  tcl = -0.2, las = 1, xpd = FALSE
+  mar = c(4, 4, 4, 4), mgp = c(2.5, 0.6, 0),
+  tcl = -0.4, las = 1, xpd = FALSE
 )
 
 # plot response
@@ -410,7 +410,7 @@ par(las = 1)
 plot(NULL,
   xlim = c(-0.4, 0.8), ylim = c(-0.5, 0.5),
   xlab = "Loading on PC1", ylab = "Loading on PC3",
-  xaxs = "i", yaxs = "i", asp = 1, bty = "l", # axes = FALSE,
+  xaxs = "i", yaxs = "i", asp = 1, bty = "l",
   main = paste0("PCA Loading"),
 )
 abline(h = 0, col = "gray40", lty = "dotted")
