@@ -1,6 +1,8 @@
 library(paletteer)
 library(ggplot2)
 library(ggrepel)
+library(ggsankey)
+
 
 # Plot settings -----------------------------------------------------------
 
@@ -81,6 +83,11 @@ resol <- 300
 
 # colors transparency
 transparency_colors <- 0.8
+
+# prepare colors for response (7 levels)
+colors_response7 <- paletteer_c("viridis::viridis", nlevels(metadata$response_7levels)) |>
+  adjustcolor(alpha.f = transparency_colors)
+names(colors_response7) <- levels(metadata$response_7levels)
 
 # prepare colors for response (6 levels)
 colors_response6 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response_6levels)) |>
@@ -426,3 +433,82 @@ arrows_pca_loadings(
 
 # close graphic device
 dev.off()
+
+
+# Sankey plot of response classes collapsing ------------------------------
+
+# prepare data and colors
+xx <- metadata[, c("dataset", grepv("response", names(metadata)))]
+names(xx)
+long_data <- make_long(
+  xx, dataset, response_7levels, response_6levels, response_3levels, response_2levels
+)
+levels(long_data$x)
+levels(long_data$x) <- levels(long_data$next_x) <- c(
+  "Dataset", "Response (7)", "Response (6)", "Response (3)", "Response (2)"
+)
+long_data$node_chr <- long_data$node
+long_data$node <- factor(long_data$node, levels = c(
+  levels(xx$dataset), levels(xx$response_7levels)
+))
+pal_node <- c(colors_response7, colors_dataset)
+long_data$fill_node <- unname(pal_node[long_data$node_chr])
+leg_dataset <- data.frame(key = names(colors_dataset))
+leg_response <- data.frame(key = names(colors_response7))
+
+# create plot
+pl <- ggplot(long_data, aes(
+  x = x, next_x = next_x,
+  node = node, next_node = next_node,
+  label = node
+)) +
+  geom_sankey(
+    aes(fill = I(fill_node)),
+    flow.alpha = 0.6,
+    show.legend = FALSE,
+    position = "identity",
+    type = "sankey"
+  ) +
+  geom_sankey_label(size = 3, color = "black", fill = "white") +
+  # invisible legend layers
+  geom_point(
+    data = leg_dataset,
+    aes(x = 1, y = 1, fill = key),
+    inherit.aes = FALSE,
+    alpha = 0,
+    shape = 22
+  ) +
+  geom_point(
+    data = leg_response,
+    aes(x = 1, y = 1, color = key),
+    inherit.aes = FALSE,
+    alpha = 0
+  ) +
+  scale_fill_manual(
+    name   = "Dataset",
+    values = colors_dataset,
+    breaks = names(colors_dataset)
+  ) +
+  scale_color_manual(
+    name   = "Response Class",
+    values = colors_response7,
+    breaks = names(colors_response7)
+  ) +
+  guides(
+    fill  = guide_legend(ncol = 1, override.aes = list(alpha = 1, shape = 22, size = 6, colour = NA)),
+    color = guide_legend(ncol = 1, override.aes = list(alpha = 1, shape = 15, size = 6, stroke = 0))
+  ) +
+  # theme
+  theme_void() +
+  theme(
+    axis.text.x = element_text(color = "black", size = 10),
+    legend.position = "right",
+    legend.box = "vertical",
+    plot.background = element_rect(fill = "white")
+  )
+
+# save plot
+ggsave(
+  plot = pl, filename = file.path(plots_folder, "sankey_response_classes.png"),
+  width = 6, height = 4, units = "in", dpi = 300
+)

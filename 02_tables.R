@@ -84,3 +84,21 @@ for (response in grepv("^response", names(metadata))) {
       "table_by_", response, ".docx"
     )))
 }
+
+
+# Additional table response~dataset ---------------------------------------
+tbl_summary(
+  data = metadata,
+  include = response_7levels,
+  by = "dataset",
+  missing = "ifany",
+  statistic = list(
+    all_categorical() ~ "{n} ({p}%)"
+  ),
+) |>
+  modify_header(all_stat_cols() ~ "**{level}**  \nN = {n} ({style_percent(p)}%)") |>
+  bold_labels() |>
+  modify_spanning_header(all_stat_cols() ~ "**Dataset**") |>
+  italicize_levels() |>
+  as_gt() |>
+  gt::gtsave(filename = file.path(output_folder, "small_table_by_dataset_7levels.docx"))
