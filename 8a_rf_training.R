@@ -9,7 +9,6 @@ suppressPackageStartupMessages({
   library(pROC) # v1.19.0.1
   library(grid) # v4.5.2
   library(ggplot2)
-  source("rf_functions.R")
 })
 
 
@@ -147,6 +146,19 @@ df_all_list <- lapply(
 names(df_all_list) <- to_do$rf_formula
 
 # Split dataset in train and test subsets ---------------------------------
+
+# function for split stratified over the levels of a variable y
+stratified_split <- function(y, p_train = 0.8) {
+  stopifnot(is.factor(y))
+  idx_train <- integer(0)
+  for (lvl in levels(y)) {
+    idx <- which(y == lvl)
+    if (length(idx) == 0) next
+    n_tr <- max(1, floor(length(idx) * p_train))
+    idx_train <- c(idx_train, sample(idx, n_tr))
+  }
+  sort(unique(idx_train))
+}
 
 # get training data (~75%) and test data (~25%) for each case
 train_idx_list <- lapply(
