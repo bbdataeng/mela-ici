@@ -17,29 +17,21 @@ xdata <- read_excel("nonsync/00_raw_data/immunotherapy_datasets_metadata_ciberso
   as.data.frame() |> # convert to dataframe
   strings2factors(verbose = FALSE) # convert character columns to factors
 
+rownames(xdata) <- xdata$accession
+
 metadata <- read_excel("nonsync/00_raw_data/immunotherapy_datasets_metadata.xlsx") |>
   as.data.frame() |> # convert to dataframe
   strings2factors(verbose = FALSE) # convert character columns to factors
 
 # compare dimensions
-dim(metadata) # 292 rows, 9 columns
-dim(xdata) # 292 rows, 32 columns
+dim(metadata) # 367 rows, 16 columns
+dim(xdata) # 367 rows, 39 columns
 
-# compare metadata
-names(metadata)
-names(xdata)
-all(names(metadata) %in% names(xdata))
-identical(metadata, xdata[, names(metadata)]) # identical metadata
-metadata$response_group <- xdata$response_group # copy response_group
 
 # extract CibersortX column names
 cibersortx_cols <- setdiff(names(xdata), names(metadata))
 cibersortx_cols
 
-# combine data
-xdata <- cbind(metadata, xdata[, cibersortx_cols])
-rownames(xdata) <- xdata$accession
-rm(metadata) # object no longer needed
 
 
 # Extract patient_id column -----------------------------------------------
@@ -71,7 +63,7 @@ xdata$patient_id <- paste(xdata$sample_name, as.numeric(xdata$dataset), sep = "@
 # examine subset from dataset 1
 # define columns to compare
 columns_to_compare_lenient <- c("age", "gender")
-columns_to_compare_strict <- c("treatment", "response", "response_group", "age", "gender", "enrichment_protocol", "dataset")
+columns_to_compare_strict <- c("treatment", "treatment_details", "RECIST_response", "response_group", "age", "gender", "enrichment_protocol", "dataset")
 
 # loop over each dataset
 for (xx_i in seq_along(levels(xdata$dataset))) {
@@ -150,7 +142,7 @@ to_check_df <- to_check_df[
   order(to_check_df$sample_name),
   setdiff(names(to_check_df), c("original_sample_name", "patient_id"))
 ]
-write_xlsx(to_check_df, file.path(output_folder, "to_check.xlsx"))
+#write_xlsx(to_check_df, file.path(output_folder, "to_check.xlsx"))
 
 ### manual corrections ###
 # reconstruct patient "reconstr_manual_62@1" (identical data expect age increasing by 1)
@@ -171,8 +163,9 @@ xdata$sample_name <- make.unique(xdata$sample_name)
 
 # reorder columns
 xdata <- xdata[, c(
-  "accession", "patient_id", "sample_name", "response", "response_group",
-  "treatment", "biopsy_time", "age", "gender", "enrichment_protocol", "dataset",
+  "accession", "patient_id", "sample_name", "RECIST_response", "response_group",
+  "treatment", "treatment_details", "biopsy_time", "age", "gender", "PFS(days)", "OS(days)",
+  "last_followup_status", "anatomical_location", "subtype", "enrichment_protocol", "dataset",
   cibersortx_cols
 )]
 # reorder rows
@@ -188,7 +181,7 @@ xdata <- xdata[order(xdata$dataset), ] # then by dataset
 str(xdata)
 
 # number of complete cases (rows)
-table(complete.cases(xdata)) |> addmargins() # 156/292 complete cases (rows)
+table(complete.cases(xdata)) |> addmargins()
 
 # check "accession"
 table(table(xdata$accession)) # all unique values
@@ -198,52 +191,56 @@ table(table(xdata$sample_name)) # now unique sample_names
 
 # check "patient_id"
 table(table(xdata$patient_id)) |> addmargins()
-# 188 total patients
-# 112 have only 1 biopsy
+# 263 total records
+# 187 patients have only 1 biopsy
 # 70 patients have 2 biopsies
 # 6 patients have more than 2 biopsies (max = 10 biopsies)
 
 # check "response"
-table(xdata$response, useNA = "always") |> addmargins() # no NAs present, but level "UNK"
-nlevels(xdata$response) # 8 levels
+table(xdata$RECIST_response, useNA = "always") |> addmargins() # NAs present, and level "NE"
+nlevels(xdata$RECIST_response) # 6 levels
 
 # check "response_group"
-table(xdata$response_group, useNA = "always") |> addmargins() # no NAs present, but level "UNK"
+table(xdata$response_group, useNA = "always") |> addmargins() # no NAs present, but level "NE"
 nlevels(xdata$response_group) # 3 levels
 
 # check "treatment"
 table(xdata$treatment, useNA = "always") |> addmargins() # no NAs present
-nlevels(xdata$treatment) # 10 levels
+nlevels(xdata$treatment) # 6 levels
+
+# check "treatment_details"
+table(xdata$treatment_details, useNA = "always") |> addmargins() # NAs present
+nlevels(xdata$treatment_details) # 5 levels
 
 # check "biopsy_time"
 table(xdata$biopsy_time, useNA = "always") |> addmargins() # no NAs present
-nlevels(xdata$biopsy_time) # 6 levels
+nlevels(xdata$biopsy_time) # 3 levels
 
 # check "age"
 table(xdata$age) |> plot(main = "age") # age distribution
 sum(is.na(xdata$age)) # 109 NAs present
 
 # check "gender"
-table(xdata$gender, useNA = "always") |> addmargins() # 56 F, 100 M, 136 NA
+table(xdata$gender, useNA = "always") |> addmargins() # 77 F, 154 M, 136 NA
 
 # check "enrichment_protocol"
 table(xdata$enrichment_protocol, useNA = "always") |> addmargins() # no NAs present, but level "unspecified"
-nlevels(xdata$enrichment_protocol) # 4 levels
+nlevels(xdata$enrichment_protocol) # 5 levels
 
 # check "dataset"
 table(xdata$dataset, useNA = "always") |> addmargins() # no NAs present
-nlevels(xdata$dataset) # 5 levels
+nlevels(xdata$dataset) # 6 levels
 table(xdata$dataset) |> plot(las = 2, main = "dataset")
 
 
 # Clean data --------------------------------------------------------------
 
 ### clean 7-level response ###
-xx <- xdata$response
+xx <- xdata$RECIST_response
 table(xx, useNA = "always") # have a look
-xx[xx == "UNK"] <- NA # turn "UNK" to NA
+xx[xx == "NE"] <- NA # turn "NE" to NA
 xdata$response_7levels <- xx |>
-  droplevels() |> # remove unused "UNK" level
+  droplevels() |> # remove unused "NE" level
   factor( # reorder levels from worst to best
     levels = c("PD", "NR", "SD", "PR", "PRCR", "R", "CR"),
     ordered = TRUE
@@ -266,7 +263,7 @@ table(xdata$response_3levels, useNA = "always") # have a look
 ### clean binary response ###
 xx <- xdata$response_group
 table(xx, useNA = "always") # have a look
-xx[xx == "UNK"] <- NA # turn "UNK" to NA
+xx[xx == "NE"] <- NA # turn "NE" to NA
 xdata$response_2levels <- xx |>
   droplevels() |> # remove unused "UNK" level
   factor( # reorder levels from worst to best
@@ -279,55 +276,40 @@ table(xdata$response_2levels, useNA = "always") # have a look
 cols_to_keep <- c(
   "accession", "patient_id", "sample_name", "response_7levels",
   "response_6levels", "response_3levels", "response_2levels",
-  "treatment", "biopsy_time", "age", "gender", "enrichment_protocol",
+  "treatment", "treatment_details", "biopsy_time", "age", "gender", "PFS(days)", "OS(days)",
+  "last_followup_status", "anatomical_location", "subtype", "enrichment_protocol",
   "dataset", cibersortx_cols
 )
 xdata <- xdata[, cols_to_keep]
 
+
 ### clean treatment ###
 table(xdata$treatment, useNA = "always") # have a look
-old_treatment <- xdata$treatment # save non-cleaned data
-# prepare cleaned treatment variable
-xdata$treatment <- as.character(xdata$treatment) |> tolower() # lower case
-xdata$treatment <- gsub("[[:space:]]+", "", xdata$treatment) # remove spaces
-xdata$treatment <- gsub("-", "", xdata$treatment) # remove hyphens
-xdata$treatment[ # clean "anti-PD-1"
-  xdata$treatment %in% c("pembrolizumab", "nivolumab", "antipd1")
-] <- "anti-PD-1"
-xdata$treatment[ # clean "anti-PD-L1"
-  xdata$treatment %in% c("antipdl1")
-] <- "anti-PD-L1"
-xdata$treatment[ # clean "anti-CTLA-4"
-  xdata$treatment %in% c("antictla4")
-] <- "anti-CTLA-4"
-xdata$treatment[ # clean "anti-PD-1 + anti-CTLA-4"
-  xdata$treatment %in% c("ipilimumab+pembrolizumab", "ipilimumab+nivolumab", "antipd1+antictla4")
-] <-
-  "anti-PD-1 + anti-CTLA-4"
 xdata$treatment <- factor(xdata$treatment, levels = c( # transform to factor
-  "anti-PD-1", "anti-PD-L1", "anti-CTLA-4", "anti-PD-1 + anti-CTLA-4"
+  "anti-PD-1", "anti-PD-L1", "anti-CTLA-4", "anti-PD-1+anti-CTLA-4", "PD1-to-CTLA4", "CTLA4-to-PD1"
 ))
 table(xdata$treatment, useNA = "always") # have a look: quite unbalanced
+
 
 ### clean biopsy_time ###
 table(xdata$biopsy_time, useNA = "always") # have a look
 old_biopsy_time <- xdata$biopsy_time # save non-cleaned data
 # clean text
 xx <- tolower(trimws(xdata$biopsy_time))
-xx <- gsub("[[:space:]]+", " ", xx)
 # flag dabrafenib+trametinib therapy as a separate covariate
 xdata$on_dabrafenib_trametinib <- grepl(
   "dabrafenib\\+trametinib", xx
 ) |> as.numeric()
 # clean levels
 xx[grepl("^pre", xx)] <- "PRE-ICB" # clean pre-ICB treatment
-xx[grepl("^on|^early", xx)] <- "ON-ICB" # clean on-ICB treatment
+xx[grepl("^on", xx)] <- "ON-ICB" # clean on-ICB treatment
 # transform to factor and add to xdata
 xdata$biopsy_time <- factor(
   xx,
   levels = c("PRE-ICB", "ON-ICB"), ordered = TRUE
 )
 table(xdata$biopsy_time, useNA = "always") # have a look
+
 
 ### clean gender ###
 table(xdata$gender, useNA = "always") # no need to clean
@@ -339,6 +321,7 @@ xx[xx == "unspecified"] <- NA # change unspecified to NA
 xx[xx == "poly-A selection"] <- "polyA-selection" # clean "polyA-selection"
 xx[xx == "ribo-zero depletion"] <- "rRNA-depletion" # clean "rRNA-depletion"
 xx[xx == "targeted mRNA capture"] <- "targeted-mRNA-capture" # clean "targeted-mRNA-capture"
+xx[xx == "Hybrid Selection"] <- "hybrid-selection" # clean "Hybrid Selection"
 xdata$enrichment_protocol <- as.factor(xx)
 table(xdata$enrichment_protocol, useNA = "always") # have a look
 
@@ -347,6 +330,35 @@ table(xdata$dataset, useNA = "always") # no need to clean
 
 ### clean patient_id ###
 xdata$patient_id <- as.factor(xdata$patient_id)
+
+### clean subtype ###
+table(xdata$subtype, useNA = "always") # have a look
+old_subtype <- xdata$subtype # save non-cleaned data
+# clean text
+xx <- tolower(xdata$subtype)
+table(xx, useNA = "always")
+xx[xx == "uveal"] <- "ocular/uveal"
+xdata$subtype <- as.factor(xx)
+
+### anatomical location ###
+table(xdata$anatomical_location, useNA = "always") # have a look
+xdata <- xdata %>%
+  separate(col = anatomical_location, into = c("x1","x2"), sep = ",", remove = F) %>%
+  mutate(x2=ifelse(grepl("inf.",x2), "SC", x2)) %>%
+  mutate(x2=ifelse(x1 %in% c("LN","SQ"), x1, x2)) %>%
+  mutate(x1=ifelse(x1 %in% c("LN","SQ"), NA, x1)) %>%
+  mutate(x1=gsub("^Left","L",x1)) %>%
+  mutate(x1=str_to_title(x1)) %>%
+  mutate(x1=trimws(x1), x2=trimws(x2)) %>%
+  unite(col = anatomical_location, x2,x1, sep = ", ", remove = F, na.rm = T) %>%
+  mutate(anatomical_location=ifelse(anatomical_location=="",NA,anatomical_location)) %>%
+  mutate(anatomical_location_s1=x2, .after="anatomical_location") %>%
+  mutate(anatomical_location_s2=x1, .after="anatomical_location_s1") %>%
+  select(-x1,-x2)
+
+table(xdata$anatomical_location, useNA = "always")
+table(xdata$anatomical_location_s1, useNA = "always")
+table(xdata$anatomical_location_s2, useNA = "always")
 
 
 # Manually exclude samples ------------------------------------------------
@@ -382,6 +394,11 @@ xdata <- xdata %>%
 
 table(table(xdata$patient_id)) # only 1 biopsy per patient, as expected
 
+# # exclude acral samples
+# xdata <- xdata %>%
+#   filter(subtype != "acral" | is.na(subtype))
+
+
 
 # Add HED data ------------------------------------------------------------
 
@@ -393,7 +410,7 @@ names(hed_data)
 names(hed_data) <- c("accession", paste0("HED_locus", LETTERS[1:3]), "HED_mean")
 
 xx <- merge(xdata, hed_data, by = "accession", all.x = TRUE)
-all(complete.cases(xx[, grepv("^HED", names(xx))])) # no missing values, safe to merge
+all(complete.cases(xx[, grep("^HED", names(xx))])) # no missing values, safe to merge
 xdata <- xx
 rownames(xdata) <- xdata$accession
 rm(xx)
@@ -402,7 +419,7 @@ rm(xx)
 # Export xdata ---------------------------------------------------------
 
 # extract HED data
-hed_data <- xdata[, grepv("^HED", names(xdata))]
+hed_data <- xdata[, grep("^HED", names(xdata))]
 
 # extract metadata
 metadata <- xdata[, setdiff(names(xdata), c(cibersortx_cols, names(hed_data)))]
