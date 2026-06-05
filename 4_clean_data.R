@@ -394,9 +394,9 @@ xdata <- xdata %>%
 
 table(table(xdata$patient_id)) # only 1 biopsy per patient, as expected
 
-# # exclude acral samples
-# xdata <- xdata %>%
-#   filter(subtype != "acral" | is.na(subtype))
+# exclude subtype acral/mucosal/ocular/uveal/other samples
+ xdata <- xdata %>%
+   filter(subtype == "cutaneous" | is.na(subtype))
 
 
 
