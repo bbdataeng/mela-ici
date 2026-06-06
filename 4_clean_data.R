@@ -316,13 +316,16 @@ table(xdata$gender, useNA = "always") # no need to clean
 
 ### clean enrichment_protocol ###
 table(xdata$enrichment_protocol, useNA = "always") # have a look
-xx <- xdata$enrichment_protocol |> as.character()
-xx[xx == "unspecified"] <- NA # change unspecified to NA
-xx[xx == "poly-A selection"] <- "polyA-selection" # clean "polyA-selection"
-xx[xx == "ribo-zero depletion"] <- "rRNA-depletion" # clean "rRNA-depletion"
-xx[xx == "targeted mRNA capture"] <- "targeted-mRNA-capture" # clean "targeted-mRNA-capture"
-xx[xx == "Hybrid Selection"] <- "hybrid-selection" # clean "Hybrid Selection"
-xdata$enrichment_protocol <- as.factor(xx)
+xdata <- xdata %>%
+  mutate(enrichment_protocol = as.character(enrichment_protocol)) %>%
+  # https://www.sciencedirect.com/science/article/pii/S1535610823000831?via%3Dihub#:~:text=CheckMate%20064%20RNAseq%20libraries%20were%20prepared%20using%20the%20Illumina%20Stranded%20mRNA%20sequencing%20kit
+  mutate(enrichment_protocol = ifelse((enrichment_protocol=="unspecified" & dataset=="Campbell-2023"), "polyA-selection", enrichment_protocol)) %>%
+  mutate(enrichment_protocol = ifelse(enrichment_protocol=="Hybrid Selection", "targeted-mRNA-capture", enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("poly-A selection","polyA-selection",enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("ribo-zero depletion","rRNA-depletion",enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("targeted mRNA capture","targeted-mRNA-capture",enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("unspecified",NA,enrichment_protocol)) %>%
+  mutate(enrichment_protocol = as.factor(enrichment_protocol))
 table(xdata$enrichment_protocol, useNA = "always") # have a look
 
 ### clean dataset ###
