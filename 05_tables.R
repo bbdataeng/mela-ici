@@ -1,14 +1,14 @@
 # Load libraries ----------------------------------------------------------
-library(gtsummary)
+library(gtsummary) # v2.5.0
 
 # Prepare folder for tables -----------------------------------------------
-output_folder <- "nonsync/02_tables"
+output_folder <- "nonsync/05_tables"
 if (!dir.exists(output_folder)) dir.create(output_folder)
 
 
 # Load clean data ---------------------------------------------------------
-metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds")
-xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds")
+metadata <- readRDS("nonsync/04_clean_data/clean_metadata.rds")
+xdata <- readRDS("nonsync/04_clean_data/clean_cibersortx.rds")
 
 # Summary tables ----------------------------------------------------------
 
@@ -89,7 +89,7 @@ for (response in grepv("^response", names(metadata))) {
 # Additional table response~dataset ---------------------------------------
 tbl_summary(
   data = metadata,
-  include = response_7levels,
+  include = response_4levels,
   by = "dataset",
   missing = "ifany",
   statistic = list(
@@ -101,4 +101,4 @@ tbl_summary(
   modify_spanning_header(all_stat_cols() ~ "**Dataset**") |>
   italicize_levels() |>
   as_gt() |>
-  gt::gtsave(filename = file.path(output_folder, "small_table_by_dataset_7levels.docx"))
+  gt::gtsave(filename = file.path(output_folder, "small_table_by_dataset_4levels.docx"))

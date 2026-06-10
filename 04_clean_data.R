@@ -1,12 +1,14 @@
 # Load libraries ----------------------------------------------------------
-library(readxl)
-library(writexl)
-library(car)
-library(gtools)
-library(tidyverse)
+suppressPackageStartupMessages({
+  library(readxl) # v1.4.5
+  library(writexl) # v1.5.4
+  library(car) # v3.1-5
+  library(gtools) # v3.9.5
+  library(tidyverse) # v2.0.0
+})
 
 # Prepare folder for cleaned data -----------------------------------------
-output_folder <- "nonsync/01_clean_data"
+output_folder <- "nonsync/04_clean_data"
 if (!dir.exists(output_folder)) dir.create(output_folder)
 
 
@@ -31,7 +33,6 @@ dim(xdata) # 367 rows, 39 columns
 # extract CibersortX column names
 cibersortx_cols <- setdiff(names(xdata), names(metadata))
 cibersortx_cols
-
 
 
 # Extract patient_id column -----------------------------------------------
@@ -142,7 +143,7 @@ to_check_df <- to_check_df[
   order(to_check_df$sample_name),
   setdiff(names(to_check_df), c("original_sample_name", "patient_id"))
 ]
-#write_xlsx(to_check_df, file.path(output_folder, "to_check.xlsx"))
+# write_xlsx(to_check_df, file.path(output_folder, "to_check.xlsx"))
 
 ### manual corrections ###
 # reconstruct patient "reconstr_manual_62@1" (identical data expect age increasing by 1)
@@ -196,7 +197,7 @@ table(table(xdata$patient_id)) |> addmargins()
 # 70 patients have 2 biopsies
 # 6 patients have more than 2 biopsies (max = 10 biopsies)
 
-# check "response"
+# check "RECIST_response"
 table(xdata$RECIST_response, useNA = "always") |> addmargins() # NAs present, and level "NE"
 nlevels(xdata$RECIST_response) # 6 levels
 
@@ -235,29 +236,23 @@ table(xdata$dataset) |> plot(las = 2, main = "dataset")
 
 # Clean data --------------------------------------------------------------
 
-### clean 7-level response ###
+### clean 5-level response ###
 xx <- xdata$RECIST_response
 table(xx, useNA = "always") # have a look
 xx[xx == "NE"] <- NA # turn "NE" to NA
-xdata$response_7levels <- xx |>
+xdata$response_5levels <- xx |>
   droplevels() |> # remove unused "NE" level
   factor( # reorder levels from worst to best
-    levels = c("PD", "NR", "SD", "PR", "PRCR", "R", "CR"),
+    levels = c("PD", "SD", "PR", "PRCR", "CR"),
     ordered = TRUE
   )
-table(xdata$response_7levels, useNA = "always") # have a look
-
-### create 6-level response ###
-xx <- xdata$response_7levels
-xx[xx == "PRCR" & !is.na(xx)] <- "R" # turn "PRCR" to "R"
-xdata$response_6levels <- droplevels(xx)
-table(xdata$response_6levels, useNA = "always") # have a look
+table(xdata$response_5levels, useNA = "always") # have a look
 
 ### create 3-level response ###
-xx <- xdata$response_7levels
-xx[xx %in% c("PD", "NR") & !is.na(xx)] <- "NR" # level 1: non-responder
-xx[xx %in% c("PR", "PRCR", "R", "CR") & !is.na(xx)] <- "R" # level 3: responder
-xdata$response_3levels <- droplevels(xx)
+xx <- xdata$response_5levels |> as.character()
+xx[xx == "PD" & !is.na(xx)] <- "NR" # level 1: non-responder
+xx[xx %in% c("PR", "PRCR", "CR") & !is.na(xx)] <- "R" # level 3: responder
+xdata$response_3levels <- factor(xx, levels = c("NR", "SD", "R"), ordered = TRUE)
 table(xdata$response_3levels, useNA = "always") # have a look
 
 ### clean binary response ###
@@ -265,18 +260,18 @@ xx <- xdata$response_group
 table(xx, useNA = "always") # have a look
 xx[xx == "NE"] <- NA # turn "NE" to NA
 xdata$response_2levels <- xx |>
-  droplevels() |> # remove unused "UNK" level
+  droplevels() |> # remove unused levels
   factor( # reorder levels from worst to best
     levels = c("NR", "R"),
-    ordered = TRUE
+    ordered = FALSE
   )
 table(xdata$response_2levels, useNA = "always") # have a look
 
 # reorder response columns
 cols_to_keep <- c(
-  "accession", "patient_id", "sample_name", "response_7levels",
-  "response_6levels", "response_3levels", "response_2levels",
-  "treatment", "treatment_details", "biopsy_time", "age", "gender", "PFS(days)", "OS(days)",
+  "accession", "patient_id", "sample_name", "response_5levels",
+  "response_3levels", "response_2levels", "treatment", "treatment_details",
+  "biopsy_time", "age", "gender", "PFS(days)", "OS(days)",
   "last_followup_status", "anatomical_location", "subtype", "enrichment_protocol",
   "dataset", cibersortx_cols
 )
@@ -319,12 +314,12 @@ table(xdata$enrichment_protocol, useNA = "always") # have a look
 xdata <- xdata %>%
   mutate(enrichment_protocol = as.character(enrichment_protocol)) %>%
   # https://www.sciencedirect.com/science/article/pii/S1535610823000831?via%3Dihub#:~:text=CheckMate%20064%20RNAseq%20libraries%20were%20prepared%20using%20the%20Illumina%20Stranded%20mRNA%20sequencing%20kit
-  mutate(enrichment_protocol = ifelse((enrichment_protocol=="unspecified" & dataset=="Campbell-2023"), "polyA-selection", enrichment_protocol)) %>%
-  mutate(enrichment_protocol = ifelse(enrichment_protocol=="Hybrid Selection", "targeted-mRNA-capture", enrichment_protocol)) %>%
-  mutate(enrichment_protocol = gsub("poly-A selection","polyA-selection",enrichment_protocol)) %>%
-  mutate(enrichment_protocol = gsub("ribo-zero depletion","rRNA-depletion",enrichment_protocol)) %>%
-  mutate(enrichment_protocol = gsub("targeted mRNA capture","targeted-mRNA-capture",enrichment_protocol)) %>%
-  mutate(enrichment_protocol = gsub("unspecified",NA,enrichment_protocol)) %>%
+  mutate(enrichment_protocol = ifelse((enrichment_protocol == "unspecified" & dataset == "Campbell-2023"), "polyA-selection", enrichment_protocol)) %>%
+  mutate(enrichment_protocol = ifelse(enrichment_protocol == "Hybrid Selection", "targeted-mRNA-capture", enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("poly-A selection", "polyA-selection", enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("ribo-zero depletion", "rRNA-depletion", enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("targeted mRNA capture", "targeted-mRNA-capture", enrichment_protocol)) %>%
+  mutate(enrichment_protocol = gsub("unspecified", NA, enrichment_protocol)) %>%
   mutate(enrichment_protocol = as.factor(enrichment_protocol))
 table(xdata$enrichment_protocol, useNA = "always") # have a look
 
@@ -346,18 +341,18 @@ xdata$subtype <- as.factor(xx)
 ### anatomical location ###
 table(xdata$anatomical_location, useNA = "always") # have a look
 xdata <- xdata %>%
-  separate(col = anatomical_location, into = c("x1","x2"), sep = ",", remove = F) %>%
-  mutate(x2=ifelse(grepl("inf.",x2), "SC", x2)) %>%
-  mutate(x2=ifelse(x1 %in% c("LN","SQ"), x1, x2)) %>%
-  mutate(x1=ifelse(x1 %in% c("LN","SQ"), NA, x1)) %>%
-  mutate(x1=gsub("^Left","L",x1)) %>%
-  mutate(x1=str_to_title(x1)) %>%
-  mutate(x1=trimws(x1), x2=trimws(x2)) %>%
-  unite(col = anatomical_location, x2,x1, sep = ", ", remove = F, na.rm = T) %>%
-  mutate(anatomical_location=ifelse(anatomical_location=="",NA,anatomical_location)) %>%
-  mutate(anatomical_location_s1=x2, .after="anatomical_location") %>%
-  mutate(anatomical_location_s2=x1, .after="anatomical_location_s1") %>%
-  select(-x1,-x2)
+  separate(col = anatomical_location, into = c("x1", "x2"), sep = ",", remove = F) %>%
+  mutate(x2 = ifelse(grepl("inf.", x2), "SC", x2)) %>%
+  mutate(x2 = ifelse(x1 %in% c("LN", "SQ"), x1, x2)) %>%
+  mutate(x1 = ifelse(x1 %in% c("LN", "SQ"), NA, x1)) %>%
+  mutate(x1 = gsub("^Left", "L", x1)) %>%
+  mutate(x1 = str_to_title(x1)) %>%
+  mutate(x1 = trimws(x1), x2 = trimws(x2)) %>%
+  unite(col = anatomical_location, x2, x1, sep = ", ", remove = F, na.rm = T) %>%
+  mutate(anatomical_location = ifelse(anatomical_location == "", NA, anatomical_location)) %>%
+  mutate(anatomical_location_s1 = x2, .after = "anatomical_location") %>%
+  mutate(anatomical_location_s2 = x1, .after = "anatomical_location_s1") %>%
+  select(-x1, -x2)
 
 table(xdata$anatomical_location, useNA = "always")
 table(xdata$anatomical_location_s1, useNA = "always")
@@ -398,9 +393,17 @@ xdata <- xdata %>%
 table(table(xdata$patient_id)) # only 1 biopsy per patient, as expected
 
 # exclude subtype acral/mucosal/ocular/uveal/other samples
- xdata <- xdata %>%
-   filter(subtype == "cutaneous" | is.na(subtype))
+xdata <- xdata %>%
+  filter(subtype == "cutaneous" | is.na(subtype))
 
+xdata <- xdata |>
+  as.data.frame() |>
+  droplevels()
+
+# fix 5- (now 4-) level response
+nlevels(xdata$response_5levels) # now has 4 levels
+# rename column
+names(xdata)[names(xdata) == "response_5levels"] <- "response_4levels"
 
 
 # Add HED data ------------------------------------------------------------
