@@ -1,22 +1,35 @@
 # Load libraries ----------------------------------------------------------
-library(paletteer)
-library(corrplot)
-library(writexl)
-library(car)
-source("plotPCA.R")
+suppressPackageStartupMessages({
+  library(paletteer) # v1.7.0
+  library(corrplot) # v0.95
+  library(writexl) # v1.5.4
+  library(car) # v3.1-5
+  source("plotPCA.R")
+})
+
 
 # Prepare folder for figures ----------------------------------------------
-output_folder <- "nonsync/04_multicollinearity"
+output_folder <- "nonsync/06_multicollinearity"
 if (!dir.exists(output_folder)) dir.create(output_folder)
 
 # Load clean data ---------------------------------------------------------
-metadata <- readRDS("nonsync/01_clean_data/clean_metadata.rds") |> as.data.frame()
-xdata <- readRDS("nonsync/01_clean_data/clean_cibersortx.rds") |> as.data.frame()
-hed_data <- readRDS("nonsync/01_clean_data/clean_hed.rds") |> as.data.frame()
+metadata <- readRDS("nonsync/04_clean_data/clean_metadata.rds") |> as.data.frame()
+xdata <- readRDS("nonsync/04_clean_data/clean_cibersortx.rds") |> as.data.frame()
+hed_data <- readRDS("nonsync/04_clean_data/clean_hed.rds") |> as.data.frame()
+
+# move Absolute Score to the metadata
+metadata$cibersortx_Absolute_Score <- xdata$Absolute_Score
+xdata <- xdata[, names(xdata) != "Absolute_Score"]
 
 # add a level "Unknown" to unknown gender
 metadata$gender <- addNA(metadata$gender)
 levels(metadata$gender)[nlevels(metadata$gender)] <- "Unknown"
+
+# add a level "Unknown" to unknown response
+metadata$response_4levels <- addNA(metadata$response_4levels)
+levels(metadata$response_4levels)[nlevels(metadata$response_4levels)] <- "Unknown"
+metadata$response_3levels <- addNA(metadata$response_3levels)
+levels(metadata$response_3levels)[nlevels(metadata$response_3levels)] <- "Unknown"
 
 # add a level "Unknown" to unknown enrichment protocol
 metadata$enrichment_protocol <- addNA(metadata$enrichment_protocol)
@@ -35,15 +48,17 @@ alldata <- cbind(metadata, hed_data, xdata)
 resol <- 300
 transparency_colors <- 0.8
 
-# prepare colors for response (6 levels)
-colors_response6 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response_6levels)) |>
+# prepare colors for response (4 levels)
+colors_response5 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response_4levels) - 1) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_response6) <- levels(metadata$response_6levels)
+names(colors_response5) <- levels(metadata$response_4levels)[-nlevels(metadata$response_4levels)]
+colors_response5["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
 
 # prepare colors for response (3 levels)
-colors_response3 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response_3levels)) |>
+colors_response3 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata$response_3levels) - 1) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_response3) <- levels(metadata$response_3levels)
+names(colors_response3) <- levels(metadata$response_3levels)[-nlevels(metadata$response_3levels)]
+colors_response3["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
 
 # prepare colors for response (2 levels)
 colors_response2 <- paletteer_d("ggsci::default_jama", nlevels(metadata$response_2levels)) |>
@@ -75,7 +90,7 @@ names(colors_treatment) <- levels(metadata$treatment)
 
 # PCA ---------------------------------------------------------------------
 
-# log-transform data
+# log-transform data (keep absolute score out)
 trdata <- as.matrix(xdata)
 trdata <- log(trdata + 0.001) # log transform adding a small epsilon to avoid log(0)
 
@@ -104,12 +119,12 @@ for (combination in combinations) {
   plot_pca_factor(
     pca_res = pca, # output of prcomp()
     PCs_to_plot = combination, # PCs to plot on X and Y axis respectively
-    metadata = metadata, # dataframe of metadata (rows matching PCA data)
+    metadata = metadata[names(metadata) != "cibersortx_Absolute_Score"], # dataframe of metadata (rows matching PCA data)
     vars_to_use = c( # which variables (columns of metadata) should be used?
-      "response_6levels", "response_3levels", "response_2levels", "treatment", "gender", "enrichment_protocol", "dataset"
+      "response_4levels", "response_3levels", "response_2levels", "treatment", "gender", "enrichment_protocol", "dataset"
     ),
     colors_vars_list = list( # list of colors for the variables
-      response_6levels = colors_response6,
+      response_4levels = colors_response5,
       response_3levels = colors_response3,
       response_2levels = colors_response2,
       treatment = colors_treatment,
@@ -143,17 +158,12 @@ dev.off()
 
 # PCA loadings ------------------------------------------------------------
 
-set_dark_theme <- function() {
-  par(
-    bg = "black", # background of plot area
-    fg = "white", # foreground: axis ticks, box
-    col = "white", # default plotting color
-    col.axis = "white", # axis tick labels
-    col.lab = "white", # axis titles
-    col.main = "white", # main title
-    col.sub = "white" # subtitle (if used)
-  )
-}
+# export table of loadings
+loadings_df <- pca$rotation |>
+  round(3) |>
+  as.data.frame()
+write.csv(loadings_df, file.path(output_folder, "loadings_pca.csv"))
+
 arrows_pca_loadings <- function(
   PCx = "PC1", PCy = "PC2",
   text.cex = 0.5, col.text = "black", loadings_data, ...
@@ -180,7 +190,6 @@ arrows_pca_loadings <- function(
 }
 
 plot_rotation <- function(PCx = "PC1", PCy = "PC2", loadings_data) {
-  # set_dark_theme()
   par(las = 1, mar = rep(3, 4), mgp = c(2, 0.7, 0), tcl = -0.3, xpd = TRUE)
   plot(NULL,
     xlim = c(-1, 1), ylim = c(-1, 1),
@@ -241,7 +250,7 @@ cormat_all <- cor(alldata[, numeric_variables],
   use = "pairwise.complete.obs"
 )
 png(file.path(output_folder, "corrplot_all_numeric.png"),
-  width = 8 * resol, height = 6 * resol, res = resol
+  width = 8.5 * resol, height = 6.5 * resol, res = resol
 )
 corrplot(
   cormat_all,
@@ -258,69 +267,19 @@ corrplot(
 )
 dev.off()
 
-# Inspect collinearity between predictors ---------------------------------
 
-# define threshold for cutting tree
-hclust_height_thr <- 0.5
+# Correlation between cibersortx columns ----------------------------------
 
-# correlation matrix of cell types
-all(complete.cases(xdata)) # no missing values
-cormat <- cor(xdata, method = "spearman") # calculate Spearman correlation
-
-# cluster correlated cell types
-hc <- hclust(as.dist(1 - abs(cormat)), method = "average")
-
-# cut tree below a defined threshold
-grp <- cutree(hc, h = hclust_height_thr) # all merges below threshold
-table(grp)
-unique(grp) |> length() # number of clusters
-
-# get representative cell types for clustered groups
-get_representatives <- function(grp, cormat) {
-  split_names <- split(colnames(cormat), grp)
-  reps <- lapply(split_names, function(vars) {
-    sub <- abs(cormat[vars, vars, drop = FALSE])
-    vars[which.max(rowMeans(sub))]
-  })
-  unlist(reps)
-}
-reps <- get_representatives(grp, cormat)
-reps
-
-# plot dendrogram
-labels_marked <- ifelse( # mark representatives with a star
-  cell_types %in% reps, paste0(cell_types, " *"), cell_types
+xx <- c(names(xdata), "cibersortx_Absolute_Score")
+cormat_cibersortx <- cor(alldata[, xx],
+  method = "spearman",
+  use = "pairwise.complete.obs"
 )
-ord <- hc$order
-xx <- grp[ord] |> as.vector()
-xx_groups <- names(table(xx))[table(xx) > 1]
-xx <- unique(xx)
-which_rects_indexes <- which(xx %in% xx_groups)
-png(file.path(output_folder, "dendrogram_correlated_cibersortx.png"),
-  width = 6 * resol, height = 5 * resol, res = resol
-)
-par(mar = c(3, 4.1, 2, 0), las = 1, xpd = TRUE, lwd = 1)
-plot(
-  hc,
-  labels = labels_marked, xlab = "", cex = 0.7,
-  main = "Dendrogram of immune cell types"
-)
-par(lwd = 2)
-rect.hclust(hc, h = hclust_height_thr, which = which_rects_indexes, border = "#023E8A")
-text(
-  x = mean(par("usr")[1:2]),
-  y = grconvertY(0, from = "ndc", to = "user"),
-  labels = paste0("distance = 1 - |Spearman ρ|\nTree cut at height < ", hclust_height_thr),
-  pos = 3
-)
-dev.off()
-
-# plot correlation matrix
 png(file.path(output_folder, "corrplot_cibersortx.png"),
   width = 8 * resol, height = 6 * resol, res = resol
 )
 corrplot(
-  cormat[ord, ord],
+  cormat_cibersortx,
   order = "original",
   col = paletteer_c("grDevices::RdBu", 150, direction = -1),
   tl.col = "black", tl.cex = 0.8, tl.srt = 45,
@@ -334,55 +293,10 @@ corrplot(
 )
 dev.off()
 
-# correlation matrix after selecting variables
-cormat_selected <- cor(xdata[, as.vector(reps)], method = "spearman")
-new_ord <- cell_types[ord]
-new_ord <- new_ord[new_ord %in% reps]
-png(file.path(output_folder, "corrplot_selected_cibersortx.png"),
-  width = 8 * resol, height = 6 * resol, res = resol
-)
-corrplot(
-  cormat_selected[new_ord, new_ord],
-  order = "original",
-  col = paletteer_c("grDevices::RdBu", 150, direction = -1),
-  tl.col = "black", tl.cex = 0.8, tl.srt = 45,
-  method = "circle",
-  type = "full",
-  is.corr = TRUE,
-  title = "Spearman correlation matrix of selected variables",
-  diag = TRUE,
-  outline = FALSE,
-  mar = c(0, 0, 1.5, 0)
-)
-dev.off()
-
-
-# Export selected variables -----------------------------------------------
-
-# summary table
-cluster_members <- split(names(grp), grp)
-summary_list <- lapply(names(cluster_members), function(g) {
-  data.frame(
-    cluster = as.integer(g),
-    representative = reps[g],
-    members = paste(cluster_members[[g]], collapse = ", "),
-    row.names = NULL
-  )
-})
-cluster_summary <- do.call(rbind, summary_list)
-cluster_summary
-write_xlsx(
-  cluster_summary,
-  file.path(output_folder, "clusters_correlated_cibersortx.xlsx")
-)
-
-# txt file with selected variables
-writeLines(as.vector(reps), file.path(output_folder, "selected_cibersortx.txt"))
-
 
 # Export correlation data -------------------------------------------------
 
-cormat_triangle <- cormat
+cormat_triangle <- cormat_all
 cormat_triangle[upper.tri(cormat_triangle, diag = TRUE)] <-
   NA # assign NA to upper triangle, including the diagonal
 cor_df <- as.data.frame.table(cormat_triangle)
@@ -406,7 +320,7 @@ for (i in seq_len(nrow(strong_cor_df))) {
     "scatter.", i, ".", x_cell, "-", y_cell, ".png"
   )), height = 4.5 * resol, width = 4 * resol, res = resol)
   plot(
-    x = rank(xdata[, x_cell]), y = rank(xdata[, y_cell]),
+    x = rank(alldata[, x_cell]), y = rank(alldata[, y_cell]),
     las = 1, xlab = paste(x_cell, "(Rank)"), ylab = paste(y_cell, "(Rank)"), asp = 1,
     main = paste0("Spearman correlation = ", strong_cor_df$spearman_correlation[i]),
     pch = 21, bg = colors_dataset[as.numeric(metadata$dataset)]
