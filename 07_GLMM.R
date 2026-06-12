@@ -40,7 +40,7 @@ to_do_list <- lapply(outdirs, function(x) {
   # prepare new folder names
   to_do$folder <- character(nrow(to_do))
   for (i in seq_len(nrow(to_do))) {
-    to_do_list[[x]]$folder[i] <- file.path(
+    to_do$folder[i] <- file.path(
       x, # main output folder
       paste(to_do$f[i],
         ifelse(to_do$age[i] && to_do$gender[i], "withAge_withGender", ifelse(
@@ -52,7 +52,7 @@ to_do_list <- lapply(outdirs, function(x) {
       )
     )
     # create folders
-    if (!dir.exists(to_do_list[[x]]$folder[i])) dir.create(to_do_list[[x]]$folder[i])
+    if (!dir.exists(to_do$folder[i])) dir.create(to_do$folder[i])
   }
   to_do # return object
 })
@@ -64,9 +64,6 @@ to_do_list <- lapply(outdirs, function(x) {
 metadata_complete <- readRDS("nonsync/04_clean_data/clean_metadata.rds")
 hed_complete <- readRDS("nonsync/04_clean_data/clean_hed.rds")
 
-# add cibersortx absolute score to metadata
-metadata_complete$cibersortx_Absolute_Score <- readRDS("nonsync/04_clean_data/clean_cibersortx.rds")$Absolute_Score
-
 # transform binary response variable into 0s (NR) and 1s (R)
 metadata_complete$response <- as.numeric(metadata_complete$response_2levels == "R")
 
@@ -77,7 +74,7 @@ to_exclude <- which(
 )
 
 # keep only necessary metadata columns
-metadata_complete <- metadata_complete[, c("accession", "response", "age", "gender", "dataset", "cibersortx_Absolute_Score")]
+metadata_complete <- metadata_complete[, c("accession", "response", "age", "gender", "dataset")]
 
 # remove mean HED column
 hed_complete <- hed_complete[, setdiff(names(hed_complete), "HED_mean")]
@@ -391,28 +388,6 @@ for (x in seq_along(to_do_list)) {
         width_in = 6, height_in = 5 # width and height of the plot in inches
       )
     }
-  }
-}
-
-
-# Plots showing CIBERSORTx absolute score ---------------------------------
-
-for (x in seq_along(to_do_list)) {
-  for (i in seq_len(nrow(to_do_list[[x]]))) {
-    plot_glmer_fitted_continuous(
-      model = models[[x]][[i]], # binomial model fitted with lme4::glmer()
-      model_formula = as.formula(to_do_list[[x]]$formula[i]), # formula used to fit the model
-      results_table = res_tabs[[x]][[i]], # results_table, output of get_results_table()
-      data = df_data_list[[x]][[i]], # data used to fit the model
-      response_levels = c("NR", "R"), # levels of response, corresponding to 0 and 1
-      bootstrap_object = bootstrap[[x]][[i]], # bootstrap object returned by boot.glmm.pred()
-      link = "logit", # link function
-      covariate_to_plot = "cibersortx_Absolute_Score", # which covariate should be plotted
-      fitted_resolution = 100, # resolution of calculated fitted values
-      file_path = file.path(to_do_list[[x]]$folder[i], paste0("fitted_cibersortx_absScore.png")), # path to save the plot
-      res_ppi = 300, # resolution (pixels per inch)
-      width_in = 8, height_in = 4 # width and height of the plot in inches
-    )
   }
 }
 
