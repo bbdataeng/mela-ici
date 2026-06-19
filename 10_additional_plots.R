@@ -32,6 +32,10 @@ pca_res <- list(
   nocheckmate067 = readRDS("nonsync/06_PCA_multicollinearity/nocheckmate067/PCA/results_pca.rds")
 )
 
+# clean anatomical site
+metadata_complete$anatomical_location_s1 <- as.factor(metadata_complete$anatomical_location_s1) |> addNA()
+levels(metadata_complete$anatomical_location_s1)[nlevels(metadata_complete$anatomical_location_s1)] <- "Unknown"
+
 # identify checkmate067 cohort
 to_exclude <- which(
   metadata_complete$dataset == "Campbell-2023" &
@@ -86,6 +90,11 @@ alldata <- lapply(alldata, function(x) {
 colors_treatment <- paletteer_d("ggsci::default_jco", nlevels(alldata[[1]]$treatment))
 names(colors_treatment) <- levels(alldata[[1]]$treatment)
 
+# prepare colors for anatomical site
+colors_anatomy <- paletteer_d("ggsci::default_nejm", nlevels(alldata[[1]]$anatomical_location_s1))
+names(colors_anatomy) <- levels(alldata[[1]]$anatomical_location_s1)
+colors_anatomy["Unknown"] <- "white"
+
 
 # Volcano plot NR vs. R ---------------------------------------------------
 source("my_volcano_plot.R")
@@ -137,7 +146,6 @@ my_volcano_plot(
   height_in = 6, # numeric height (in inches) used when saving the plot
   show_legend = TRUE # logical; if TRUE show legend, if FALSE hide legend
 )
-
 
 
 # Prepare PCA plots -------------------------------------------------------
@@ -202,6 +210,9 @@ arrows_pca_loadings <- function(
     pos = position_text, cex = text.cex, col = col.text
   )
 }
+
+
+# Plots PC2~PC1 -----------------------------------------------------------
 
 for (x in names(outdirs)) {
   # prepare rotation data and colors
@@ -285,7 +296,53 @@ for (x in names(outdirs)) {
 }
 
 
-# PCA plots for PC1 vs. PC3 -----------------------------------------------
+# Plots for anatomical location -------------------------------------------
+
+for (x in names(outdirs)) {
+  # open graphic device
+  png(
+    filename = file.path(outdirs[x], "PCA_PC1PC2PC3_anatomical_location.png"),
+    width = resol * 3.5, height = resol * 18, res = resol
+  )
+
+
+  # set graphical parameters
+  par(
+    mfrow = c(5, 1),
+    mar = c(4, 4, 4, 4), mgp = c(2.5, 0.6, 0),
+    tcl = -0.4, las = 1, xpd = FALSE, font.main = 1
+  )
+
+  # plot anatomical location on PC2~PC1
+  xrange <- c(
+    -max(abs(pca_res[[x]]$x[, c("PC1", "PC2")])),
+    max(abs(pca_res[[x]]$x[, c("PC1", "PC2")]))
+  ) * 1.2
+  make_pca_plot(
+    pca_res = pca_res[[x]], PCx = "PC1", PCy = "PC2",
+    by_var = alldata[[x]]$anatomical_location_s1,
+    xlim = xrange, ylim = c(-5.3, 6.7), main = "Anatomical location",
+    legend_ncol = 2, legend_pos = "topright", cols = colors_anatomy
+  )
+
+  # plot anatomical location on PC3~PC1
+  xrange <- c(
+    -max(abs(pca_res[[x]]$x[, c("PC1", "PC3")])),
+    max(abs(pca_res[[x]]$x[, c("PC1", "PC3")]))
+  ) * 1.2
+  make_pca_plot(
+    pca_res = pca_res[[x]], PCx = "PC1", PCy = "PC3",
+    by_var = alldata[[x]]$anatomical_location_s1,
+    xlim = xrange, ylim = c(-5.3, 6.7), main = "Anatomical location",
+    legend_ncol = 2, legend_pos = "bottomleft", cols = colors_anatomy
+  )
+
+  # close graphic device
+  dev.off()
+}
+
+
+# Plots PC3~PC1 -----------------------------------------------------------
 
 for (x in names(outdirs)) {
   # define symmetric axis range
@@ -304,14 +361,14 @@ for (x in names(outdirs)) {
   # open graphic device
   png(
     filename = file.path(outdirs[x], "PCA_PC1PC3.png"),
-    width = resol * 8, height = resol * 8, res = resol
+    width = resol * 14.4, height = resol * 3.5, res = resol
   )
 
   # set graphical parameters
   par(
-    mfrow = c(2, 2),
-    mar = c(2.5, 2.5, 2.5, 0.2), mgp = c(1.5, 0.4, 0),
-    tcl = -0.2, las = 1, xpd = FALSE
+    mfrow = c(1, 4),
+    mar = c(4, 4, 4, 4), mgp = c(2.5, 0.6, 0),
+    tcl = -0.4, las = 1, xpd = FALSE, font.main = 1
   )
 
   # plot response
@@ -445,6 +502,6 @@ for (x in names(outdirs)) {
   # save plot
   ggsave(
     plot = pl, filename = file.path(outdirs[x], "sankey_response_classes.png"),
-    width = 6, height = 4, units = "in", dpi = 300
+    width = 5, height = 4, units = "in", dpi = 300
   )
 }

@@ -49,6 +49,10 @@ levels(metadata_complete$response_3levels)[nlevels(metadata_complete$response_3l
 metadata_complete$enrichment_protocol <- addNA(metadata_complete$enrichment_protocol)
 levels(metadata_complete$enrichment_protocol)[nlevels(metadata_complete$enrichment_protocol)] <- "Unknown"
 
+# clean anatomical site
+metadata_complete$anatomical_location_s1 <- as.factor(metadata_complete$anatomical_location_s1) |> addNA()
+levels(metadata_complete$anatomical_location_s1)[nlevels(metadata_complete$anatomical_location_s1)] <- "Unknown"
+
 # sanitize cell types names
 cell_types <- colnames(xdata_complete)
 cell_types_sanitized <- gsub(" ", "_", cell_types)
@@ -86,43 +90,48 @@ resol <- 300
 transparency_colors <- 0.8
 
 # prepare colors for response (4 levels)
-colors_response4 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata[[i]]$response_4levels) - 1) |>
+colors_response4 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata[[1]]$response_4levels) - 1) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_response4) <- levels(metadata[[i]]$response_4levels)[-nlevels(metadata[[i]]$response_4levels)]
+names(colors_response4) <- levels(metadata[[1]]$response_4levels)[-nlevels(metadata[[1]]$response_4levels)]
 colors_response4["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
 
 # prepare colors for response (3 levels)
-colors_response3 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata[[i]]$response_3levels) - 1) |>
+colors_response3 <- paletteer_c("grDevices::RdYlBu", nlevels(metadata[[1]]$response_3levels) - 1) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_response3) <- levels(metadata[[i]]$response_3levels)[-nlevels(metadata[[i]]$response_3levels)]
+names(colors_response3) <- levels(metadata[[1]]$response_3levels)[-nlevels(metadata[[1]]$response_3levels)]
 colors_response3["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
 
 # prepare colors for response (2 levels)
-colors_response2 <- paletteer_d("ggsci::default_jama", nlevels(metadata[[i]]$response_2levels)) |>
+colors_response2 <- paletteer_d("ggsci::default_jama", nlevels(metadata[[1]]$response_2levels)) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_response2) <- levels(metadata[[i]]$response_2levels)
+names(colors_response2) <- levels(metadata[[1]]$response_2levels)
 
 # prepare colors for sex
-colors_gender <- paletteer_d("RColorBrewer::Dark2", nlevels(metadata[[i]]$gender)) |>
+colors_gender <- paletteer_d("RColorBrewer::Dark2", nlevels(metadata[[1]]$gender)) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_gender) <- levels(metadata[[i]]$gender)
+names(colors_gender) <- levels(metadata[[1]]$gender)
 colors_gender["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
 
 # prepare colors for enrichment protocol
-colors_enrichment_protocol <- paletteer_d("ggsci::default_igv", nlevels(metadata[[i]]$enrichment_protocol)) |>
+colors_enrichment_protocol <- paletteer_d("ggsci::default_igv", nlevels(metadata[[1]]$enrichment_protocol)) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_enrichment_protocol) <- levels(metadata[[i]]$enrichment_protocol)
+names(colors_enrichment_protocol) <- levels(metadata[[1]]$enrichment_protocol)
 colors_enrichment_protocol["Unknown"] <- adjustcolor("white", transparency_colors) # white for NA
 
 # prepare colors for dataset
 colors_dataset <- c("#C8DE7B", "#8B0000", "#E07A5F", "#FB6F92", "#E0BE36", "#00A0D1") |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_dataset) <- levels(metadata[[i]]$dataset)
+names(colors_dataset) <- levels(metadata[[1]]$dataset)
 
 # prepare colors for treatment
-colors_treatment <- paletteer_d("ggsci::default_jco", nlevels(metadata[[i]]$treatment)) |>
+colors_treatment <- paletteer_d("ggsci::default_jco", nlevels(metadata[[1]]$treatment)) |>
   adjustcolor(alpha.f = transparency_colors)
-names(colors_treatment) <- levels(metadata[[i]]$treatment)
+names(colors_treatment) <- levels(metadata[[1]]$treatment)
+
+# prepare colors for anatomical site
+colors_anatomy <- paletteer_d("ggsci::default_nejm", nlevels(metadata[[1]]$anatomical_location_s1))
+names(colors_anatomy) <- levels(metadata[[1]]$anatomical_location_s1)
+colors_anatomy["Unknown"] <- adjustcolor("white", 1)
 
 
 # PCA ---------------------------------------------------------------------
@@ -165,7 +174,8 @@ for (i in seq_along(pca)) {
       PCs_to_plot = combination, # PCs to plot on X and Y axis respectively
       metadata = metadata[[i]][names(metadata[[i]]) != "cibersortx_Absolute_Score"], # dataframe of metadata[[i]] (rows matching PCA data)
       vars_to_use = c( # which variables (columns of metadata[[i]]) should be used?
-        "response_4levels", "response_3levels", "response_2levels", "treatment", "gender", "enrichment_protocol", "dataset"
+        "response_4levels", "response_3levels", "response_2levels", "treatment",
+        "gender", "enrichment_protocol", "dataset", "anatomical_location_s1"
       ),
       colors_vars_list = list( # list of colors for the variables
         response_4levels = colors_response4,
@@ -174,7 +184,8 @@ for (i in seq_along(pca)) {
         treatment = colors_treatment,
         gender = colors_gender,
         enrichment_protocol = colors_enrichment_protocol,
-        dataset = colors_dataset
+        dataset = colors_dataset,
+        anatomical_location_s1 = colors_anatomy
       ),
       par_mar = c(2.5, 2.5, 2.5, 8), # graphical parameters par("mar")
       dark_theme = FALSE, # set to true to have dark theme
