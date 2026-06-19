@@ -278,3 +278,83 @@ for (x in names(outdirs)) {
   print(summary(fit_pfs_pred[[x]], times = times_days))
   sink()
 }
+
+
+# Compare true vs. predicted classes --------------------------------------
+
+data_nr_os <- lapply(survdata_os, function(x) {
+  xx <- x[c(which(x$real_class == "NR"), which(x$pred_class == "NR")), ]
+  xx$type <- rep(c("true", "predicted"), times = c(sum(x$real_class == "NR"), sum(x$pred_class == "NR")))
+  xx[, c("time", "event", "type", "surv")]
+})
+data_nr_pfs <- lapply(survdata_pfs, function(x) {
+  xx <- x[c(which(x$real_class == "NR"), which(x$pred_class == "NR")), ]
+  xx$type <- rep(c("true", "predicted"), times = c(sum(x$real_class == "NR"), sum(x$pred_class == "NR")))
+  xx[, c("time", "event", "type", "surv")]
+})
+data_r_os <- lapply(survdata_os, function(x) {
+  xx <- x[c(which(x$real_class == "R"), which(x$pred_class == "R")), ]
+  xx$type <- rep(c("true", "predicted"), times = c(sum(x$real_class == "R"), sum(x$pred_class == "R")))
+  xx[, c("time", "event", "type", "surv")]
+})
+data_r_pfs <- lapply(survdata_pfs, function(x) {
+  xx <- x[c(which(x$real_class == "R"), which(x$pred_class == "R")), ]
+  xx$type <- rep(c("true", "predicted"), times = c(sum(x$real_class == "R"), sum(x$pred_class == "R")))
+  xx[, c("time", "event", "type", "surv")]
+})
+
+# fit models
+fit_nr_os <- lapply(data_nr_os, function(x) survfit(surv ~ type, data = x))
+fit_nr_pfs <- lapply(data_nr_pfs, function(x) survfit(surv ~ type, data = x))
+fit_r_os <- lapply(data_r_os, function(x) survfit(surv ~ type, data = x))
+fit_r_pfs <- lapply(data_r_pfs, function(x) survfit(surv ~ type, data = x))
+
+# test
+test_nr_os <- lapply(data_nr_os, function(x) survdiff(surv ~ type, data = x))
+test_nr_pfs <- lapply(data_nr_pfs, function(x) survdiff(surv ~ type, data = x))
+test_r_os <- lapply(data_r_os, function(x) survdiff(surv ~ type, data = x))
+test_r_pfs <- lapply(data_r_pfs, function(x) survdiff(surv ~ type, data = x))
+
+# colors
+colors_type <- c(
+  true = "brown",
+  predicted = "darkgreen"
+)
+for (x in names(outdirs)) {
+  png(file.path(outdirs[x], "survival_plot_type.png"),
+    width = 8 * resol, height = 6 * resol, res = resol
+  )
+  par(
+    mfrow = c(2, 2), las = 1, font.main = 1,
+    mar = c(3.5, 3.5, 3.5, 0.5), mgp = c(2, 0.7, 0), tcl = -0.3
+  )
+  plot_survival(
+    fit = fit_nr_os[[x]],
+    test = test_nr_os[[x]],
+    main = "Overall survival\nstratified by true and predicted non-responders",
+    xlab = "Overall Survival (days)", ylab = "Probability",
+    col = colors_type, lwd = 3
+  )
+  plot_survival(
+    fit = fit_r_os[[x]],
+    test = test_r_os[[x]],
+    main = "Overall survival\nstratified by true and predicted responders",
+    xlab = "Overall Survival (days)", ylab = "Probability",
+    col = colors_type, lwd = 3
+  )
+  plot_survival(
+    fit = fit_nr_pfs[[x]],
+    test = test_pfs_real[[x]],
+    main = "Progression-free survival\nstratified by true and predicted non-responders",
+    xlab = "Progression-Free Survival (days)", ylab = "Probability",
+    col = colors_type, lwd = 3, legend_pos = "topright"
+  )
+  plot_survival(
+    fit = fit_nr_pfs[[x]],
+    test = test_pfs_real[[x]],
+    main = "Progression-free survival\nstratified by true and predicted responders",
+    xlab = "Progression-Free Survival (days)", ylab = "Probability",
+    col = colors_type, lwd = 3, legend_pos = "topright"
+  )
+  dev.off()
+}
